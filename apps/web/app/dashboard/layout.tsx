@@ -20,7 +20,8 @@ import {
   Bell, 
   Menu, 
   X,
-  Database
+  Database,
+  Workflow
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -63,6 +64,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const navItems = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Threat Canvas', href: '/dashboard/explorer', icon: Workflow },
     { name: 'Alerts', href: '/dashboard/alerts', icon: AlertTriangle },
     { name: 'Incidents', href: '/dashboard/incidents', icon: Terminal },
     { name: 'Asset Registry', href: '/dashboard/assets', icon: Layers },

@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding ThreatSync OS database with standard developer credentials...');
 
-  const passwordHash = await bcrypt.hash('ThreatSyncSecured2026!', 10);
+  const passwordHash = await bcrypt.hash('ThreatSyncSecured2026!', 12);
 
   // 1. Create default analyst user
   const user = await prisma.user.upsert({

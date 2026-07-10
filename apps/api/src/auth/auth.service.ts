@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../common/prisma.service.js';
 import { RegisterDto, LoginDto } from './auth.dto.js';
@@ -12,6 +12,14 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    // Enforce strong password complexity validation rules
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
+    if (!passwordRegex.test(dto.password)) {
+      throw new BadRequestException(
+        'Password must be at least 12 characters long, containing at least one uppercase letter, one lowercase letter, one numeric digit, and one special character.'
+      );
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -20,7 +28,8 @@ export class AuthService {
       throw new ConflictException('A user with this email address already exists');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    // Increased cost factor to 12 for strong defensive security compliance
+    const passwordHash = await bcrypt.hash(dto.password, 12);
 
     // Create organization and user in a single database transaction
     return this.prisma.$transaction(async (tx) => {
@@ -78,18 +87,34 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const tokens = await this.generateTokens(user.id, user.email, user.fullName);
+    // 1. Generate refresh token first
+    const refreshToken = await this.jwtService.signAsync(
+      { sub: user.id },
+      {
+        secret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+        expiresIn: '7d',
+      },
+    );
 
-    // Store refresh token in session table for rotation/revocation
-    await this.prisma.session.create({
+    // 2. Create session database record
+    const session = await this.prisma.session.create({
       data: {
         userId: user.id,
-        token: tokens.refreshToken,
+        token: refreshToken,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
         ipAddress,
         userAgent,
       },
     });
+
+    // 3. Generate access token with sessionId bound
+    const accessToken = await this.jwtService.signAsync(
+      { sub: user.id, email: user.email, fullName: user.fullName, sessionId: session.id },
+      {
+        secret: process.env.JWT_SECRET,
+        expiresIn: '15m',
+      },
+    );
 
     return {
       user: {
@@ -103,7 +128,7 @@ export class AuthService {
         organizationName: m.organization.name,
         role: m.role,
       })),
-      tokens,
+      tokens: { accessToken, refreshToken },
     };
   }
 
@@ -132,19 +157,35 @@ export class AuthService {
     }
 
     const user = session.user;
-    const tokens = await this.generateTokens(user.id, user.email, user.fullName);
-
+    
     // Refresh token rotation: delete old token session, create new
     await this.prisma.session.delete({ where: { id: session.id } });
-    await this.prisma.session.create({
+
+    const newRefreshToken = await this.jwtService.signAsync(
+      { sub: user.id },
+      {
+        secret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+        expiresIn: '7d',
+      },
+    );
+
+    const newSession = await this.prisma.session.create({
       data: {
         userId: user.id,
-        token: tokens.refreshToken,
+        token: newRefreshToken,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         ipAddress,
         userAgent,
       },
     });
+
+    const newAccessToken = await this.jwtService.signAsync(
+      { sub: user.id, email: user.email, fullName: user.fullName, sessionId: newSession.id },
+      {
+        secret: process.env.JWT_SECRET,
+        expiresIn: '15m',
+      },
+    );
 
     return {
       user: {
@@ -158,7 +199,7 @@ export class AuthService {
         organizationName: m.organization.name,
         role: m.role,
       })),
-      tokens,
+      tokens: { accessToken: newAccessToken, refreshToken: newRefreshToken },
     };
   }
 
@@ -197,26 +238,5 @@ export class AuthService {
         role: m.role,
       })),
     };
-  }
-
-  private async generateTokens(userId: string, email: string, fullName: string) {
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(
-        { sub: userId, email, fullName },
-        {
-          secret: process.env.JWT_SECRET || 'threatsync_super_secret_access_token_key_12345',
-          expiresIn: '15m',
-        },
-      ),
-      this.jwtService.signAsync(
-        { sub: userId },
-        {
-          secret: process.env.JWT_REFRESH_SECRET || 'threatsync_super_secret_refresh_token_key_67890',
-          expiresIn: '7d',
-        },
-      ),
-    ]);
-
-    return { accessToken, refreshToken };
   }
 }

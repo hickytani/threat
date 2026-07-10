@@ -14,13 +14,13 @@ export class AlertsController {
   @HttpCode(HttpStatus.OK)
   async findAll(
     @CurrentMember() member: ActiveMember,
-    @Query('status') status?: string,
-    @Query('severity') severity?: string,
+    @Query('status') status?: any,
+    @Query('severity') severity?: any,
     @Query('category') category?: string,
     @Query('assetId') assetId?: string,
     @Query('search') search?: string,
   ) {
-    return this.alertsService.findAll(member.organizationId, {
+    return this.alertsService.findAll({
       status,
       severity,
       category,
@@ -32,31 +32,28 @@ export class AlertsController {
   @Get(':alertId')
   @HttpCode(HttpStatus.OK)
   async findOne(
-    @CurrentMember() member: ActiveMember,
     @Param('alertId') alertId: string,
   ) {
-    return this.alertsService.findOne(member.organizationId, alertId);
+    return this.alertsService.findOne(alertId);
   }
 
   @Patch(':alertId')
   @HttpCode(HttpStatus.OK)
   async update(
-    @CurrentMember() member: ActiveMember,
     @Param('alertId') alertId: string,
     @Body() data: any,
   ) {
-    return this.alertsService.update(member.organizationId, alertId, data);
+    return this.alertsService.update(alertId, data);
   }
 
   @Post(':alertId/create-incident')
   @HttpCode(HttpStatus.CREATED)
   async createIncident(
-    @CurrentMember() member: ActiveMember,
     @Param('alertId') alertId: string,
     @Req() req: AuthenticatedRequest,
   ) {
     const userId = req.user?.id || '';
     const fullName = req.user?.fullName || 'SOC Analyst';
-    return this.alertsService.createIncident(member.organizationId, alertId, userId, fullName);
+    return this.alertsService.createIncident(alertId, userId, fullName);
   }
 }

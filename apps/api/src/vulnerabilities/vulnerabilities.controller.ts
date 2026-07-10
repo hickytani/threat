@@ -19,19 +19,17 @@ export class VulnerabilitiesController {
   @Get('asset-vulnerabilities')
   @HttpCode(HttpStatus.OK)
   async getAssetVulnerabilities(
-    @CurrentMember() member: ActiveMember,
     @Query('assetId') assetId?: string,
   ) {
-    return this.vulnService.getAssetVulnerabilities(member.organizationId, assetId);
+    return this.vulnService.getAssetVulnerabilities(assetId);
   }
 
   @Patch('asset-vulnerabilities/:id')
   @HttpCode(HttpStatus.OK)
   async updateAssetVulnerability(
-    @CurrentMember() member: ActiveMember,
     @Param('id') id: string,
     @Body() data: any,
   ) {
-    return this.vulnService.updateAssetVulnerability(member.organizationId, id, data);
+    return this.vulnService.updateAssetVulnerability(id, data);
   }
 }

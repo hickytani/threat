@@ -12,7 +12,7 @@ export class AuditController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  async findAll(@CurrentMember() member: ActiveMember) {
-    return this.auditService.findAll(member.organizationId);
+  async findAll() {
+    return this.auditService.findAll();
   }
 }

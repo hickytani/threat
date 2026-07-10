@@ -1,40 +1,46 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Scope, NotFoundException } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
+import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
+import { AuthenticatedRequest } from '../auth/auth.interface.js';
+import { IncidentStatus, AlertSeverity, TaskStatus, EvidenceStatus, Prisma } from '@prisma/client';
 
-@Injectable()
-export class IncidentsService {
-  constructor(private prisma: PrismaService) {}
-
-  async findAll(
-    organizationId: string,
-    filters: {
-      status?: string;
-      severity?: string;
-      priority?: string;
-      assigneeId?: string;
-    },
+@Injectable({ scope: Scope.REQUEST })
+export class IncidentsService extends TenantScopedRepository {
+  constructor(
+    @Inject(REQUEST) request: AuthenticatedRequest,
+    prisma: PrismaService,
   ) {
-    const where: any = { organizationId };
+    super(request, prisma);
+  }
+
+  async findAll(filters: {
+    status?: IncidentStatus;
+    severity?: AlertSeverity;
+    priority?: AlertSeverity;
+    assigneeId?: string;
+  }) {
+    const where: Prisma.IncidentWhereInput = {
+      organizationId: this.organizationId,
+    };
 
     if (filters.status) where.status = filters.status;
     if (filters.severity) where.severity = filters.severity;
     if (filters.priority) where.priority = filters.priority;
     if (filters.assigneeId) where.assignedAnalystId = filters.assigneeId;
 
-    const items = await this.prisma.incident.findMany({
+    return this.prisma.incident.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     });
-
-    return items.map((inc) => ({
-      ...inc,
-      tags: JSON.parse(inc.tags),
-    }));
   }
 
-  async findOne(organizationId: string, id: string) {
+  async findOne(id: string) {
     const inc = await this.prisma.incident.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
       include: {
         alerts: true,
         tasks: true,
@@ -49,28 +55,24 @@ export class IncidentsService {
       throw new NotFoundException(`Incident with ID ${id} not found`);
     }
 
-    return {
-      ...inc,
-      tags: JSON.parse(inc.tags),
-      tasks: inc.tasks.map(t => ({ ...t, dependencies: JSON.parse(t.dependencies) })),
-    };
+    return inc;
   }
 
-  async create(organizationId: string, data: any, userId: string, fullName: string) {
+  async create(data: any, userId: string, fullName: string) {
     const inc = await this.prisma.incident.create({
       data: {
-        organizationId,
+        organizationId: this.organizationId,
         title: data.title,
         summary: data.summary,
-        severity: data.severity || 'MEDIUM',
-        priority: data.priority || 'MEDIUM',
-        status: 'OPEN',
+        severity: (data.severity as AlertSeverity) || AlertSeverity.MEDIUM,
+        priority: (data.priority as AlertSeverity) || AlertSeverity.MEDIUM,
+        status: IncidentStatus.OPEN,
         incidentType: data.incidentType || 'POLICY_VIOLATION',
         assignedAnalystId: data.assignedAnalystId || userId,
         assignedAnalystName: data.assignedAnalystId ? undefined : fullName,
         detectionTime: new Date(),
         slaDeadline: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 hours default SLA
-        tags: JSON.stringify(data.tags || []),
+        tags: data.tags || [],
       },
     });
 
@@ -86,26 +88,29 @@ export class IncidentsService {
     return inc;
   }
 
-  async update(organizationId: string, id: string, data: any) {
+  async update(id: string, data: any) {
     const inc = await this.prisma.incident.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
     });
 
     if (!inc) {
       throw new NotFoundException(`Incident with ID ${id} not found`);
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.IncidentUpdateInput = {};
     if (data.title !== undefined) updateData.title = data.title;
     if (data.summary !== undefined) updateData.summary = data.summary;
-    if (data.severity !== undefined) updateData.severity = data.severity;
-    if (data.priority !== undefined) updateData.priority = data.priority;
+    if (data.severity !== undefined) updateData.severity = data.severity as AlertSeverity;
+    if (data.priority !== undefined) updateData.priority = data.priority as AlertSeverity;
     if (data.status !== undefined) {
-      updateData.status = data.status;
-      if (data.status === 'CONTAINED' && !inc.containmentTime) {
+      updateData.status = data.status as IncidentStatus;
+      if (data.status === IncidentStatus.CONTAINMENT_IN_PROGRESS && !inc.containmentTime) {
         updateData.containmentTime = new Date();
       }
-      if (data.status === 'RESOLVED' && !inc.resolutionTime) {
+      if (data.status === IncidentStatus.RESOLVED && !inc.resolutionTime) {
         updateData.resolutionTime = new Date();
       }
     }
@@ -123,16 +128,19 @@ export class IncidentsService {
     if (data.resolution !== undefined) updateData.resolution = data.resolution;
     if (data.lessonsLearned !== undefined) updateData.lessonsLearned = data.lessonsLearned;
 
-    const updated = await this.prisma.incident.update({
+    return this.prisma.incident.update({
       where: { id },
       data: updateData,
     });
-
-    return updated;
   }
 
-  async addComment(organizationId: string, id: string, content: string, userId: string, authorName: string, isInternalOnly = false) {
-    const inc = await this.prisma.incident.findFirst({ where: { id, organizationId } });
+  async addComment(id: string, content: string, userId: string, authorName: string, isInternalOnly = false) {
+    const inc = await this.prisma.incident.findFirst({
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
+    });
     if (!inc) throw new NotFoundException(`Incident with ID ${id} not found`);
 
     return this.prisma.incidentComment.create({
@@ -146,46 +154,56 @@ export class IncidentsService {
     });
   }
 
-  async addTask(organizationId: string, id: string, data: any) {
-    const inc = await this.prisma.incident.findFirst({ where: { id, organizationId } });
+  async addTask(id: string, data: any) {
+    const inc = await this.prisma.incident.findFirst({
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
+    });
     if (!inc) throw new NotFoundException(`Incident with ID ${id} not found`);
 
-    const task = await this.prisma.incidentTask.create({
+    return this.prisma.incidentTask.create({
       data: {
         incidentId: id,
         title: data.title,
         ownerId: data.ownerId,
         ownerName: data.ownerName,
-        priority: data.priority || 'MEDIUM',
+        priority: (data.priority as AlertSeverity) || AlertSeverity.MEDIUM,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
-        status: 'PENDING',
-        dependencies: JSON.stringify(data.dependencies || []),
+        status: TaskStatus.PENDING,
+        dependencies: data.dependencies || [],
       },
     });
-
-    return {
-      ...task,
-      dependencies: JSON.parse(task.dependencies),
-    };
   }
 
-  async updateTask(organizationId: string, id: string, taskId: string, data: any) {
-    const inc = await this.prisma.incident.findFirst({ where: { id, organizationId } });
+  async updateTask(id: string, taskId: string, data: any) {
+    const inc = await this.prisma.incident.findFirst({
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
+    });
     if (!inc) throw new NotFoundException(`Incident with ID ${id} not found`);
 
-    const task = await this.prisma.incidentTask.update({
-      where: { id: taskId, incidentId: id },
-      data,
-    });
+    const updateData: Prisma.IncidentTaskUpdateInput = {};
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.status !== undefined) updateData.status = data.status as TaskStatus;
+    if (data.priority !== undefined) updateData.priority = data.priority as AlertSeverity;
 
-    return {
-      ...task,
-      dependencies: JSON.parse(task.dependencies),
-    };
+    return this.prisma.incidentTask.update({
+      where: { id: taskId, incidentId: id },
+      data: updateData,
+    });
   }
 
-  async addEvidence(organizationId: string, id: string, data: any, userId: string, userName: string) {
-    const inc = await this.prisma.incident.findFirst({ where: { id, organizationId } });
+  async addEvidence(id: string, data: any, userId: string, userName: string) {
+    const inc = await this.prisma.incident.findFirst({
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
+    });
     if (!inc) throw new NotFoundException(`Incident with ID ${id} not found`);
 
     return this.prisma.evidence.create({
@@ -197,7 +215,7 @@ export class IncidentsService {
         uploadedById: userId,
         uploadedByName: userName,
         fileUrl: data.fileUrl || '/evidence/mock-url',
-        status: 'CLEAN',
+        status: EvidenceStatus.CLEAN,
       },
     });
   }

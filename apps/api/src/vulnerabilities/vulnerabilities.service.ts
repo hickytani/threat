@@ -1,9 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Scope, NotFoundException } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
+import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
+import { AuthenticatedRequest } from '../auth/auth.interface.js';
+import { Prisma } from '@prisma/client';
 
-@Injectable()
-export class VulnerabilitiesService {
-  constructor(private prisma: PrismaService) {}
+@Injectable({ scope: Scope.REQUEST })
+export class VulnerabilitiesService extends TenantScopedRepository {
+  constructor(
+    @Inject(REQUEST) request: AuthenticatedRequest,
+    prisma: PrismaService,
+  ) {
+    super(request, prisma);
+  }
 
   async getCatalog() {
     return this.prisma.vulnerability.findMany({
@@ -11,10 +20,10 @@ export class VulnerabilitiesService {
     });
   }
 
-  async getAssetVulnerabilities(organizationId: string, assetId?: string) {
-    const where: any = {
+  async getAssetVulnerabilities(assetId?: string) {
+    const where: Prisma.AssetVulnerabilityWhereInput = {
       asset: {
-        organizationId,
+        organizationId: this.organizationId,
       },
     };
 
@@ -22,7 +31,7 @@ export class VulnerabilitiesService {
       where.assetId = assetId;
     }
 
-    const items = await this.prisma.assetVulnerability.findMany({
+    return this.prisma.assetVulnerability.findMany({
       where,
       include: {
         asset: {
@@ -39,17 +48,15 @@ export class VulnerabilitiesService {
         },
       },
     });
-
-    return items;
   }
 
-  async updateAssetVulnerability(organizationId: string, id: string, data: any) {
+  async updateAssetVulnerability(id: string, data: any) {
     // Verify asset belongs to organization
     const mapping = await this.prisma.assetVulnerability.findFirst({
       where: {
         id,
         asset: {
-          organizationId,
+          organizationId: this.organizationId,
         },
       },
     });
@@ -58,7 +65,7 @@ export class VulnerabilitiesService {
       throw new NotFoundException(`Asset Vulnerability mapping with ID ${id} not found`);
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.AssetVulnerabilityUpdateInput = {};
     if (data.status !== undefined) {
       updateData.status = data.status;
       // Adjust asset vulnerability count if remediating

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma.service.js';
 import bcrypt from 'bcryptjs';
+import { AlertSeverity, IncidentStatus, AssetType, AssetCriticality, Environment } from '@prisma/client';
 
 @Injectable()
 export class SeederService {
@@ -16,7 +17,7 @@ export class SeederService {
       return { message: 'Organization already populated with data.' };
     }
 
-    const passwordHash = await bcrypt.hash('ThreatSyncSecured2026!', 10);
+    const passwordHash = await bcrypt.hash('ThreatSyncSecured2026!', 12);
 
     // 1. Seed 5 Team Members
     const analysts = [
@@ -50,11 +51,11 @@ export class SeederService {
             userId: user.id,
           },
         },
-        update: { role: analyst.role },
+        update: { role: analyst.role as any },
         create: {
           organizationId,
           userId: user.id,
-          role: analyst.role,
+          role: analyst.role as any,
         },
         include: {
           user: true,
@@ -64,7 +65,6 @@ export class SeederService {
     }
 
     const analyst1 = seededMembers[0];
-    const manager = seededMembers[2];
 
     // 2. Seed Vulnerability Catalog (Global)
     const vulnerabilities = [
@@ -73,12 +73,12 @@ export class SeederService {
         title: 'Apache Log4j2 Remote Code Execution (Log4Shell)',
         description: 'Apache Log4j2 <=2.14.1 JNDI features used in configuration, log messages, and parameters do not protect against attacker-controlled LDAP and other JNDI endpoints.',
         cvssScore: 10.0,
-        severity: 'CRITICAL',
+        severity: AlertSeverity.CRITICAL,
         publishedDate: new Date('2021-12-10'),
         modifiedDate: new Date('2021-12-28'),
         isKnownExploited: true,
-        affectedProducts: JSON.stringify(['Apache Log4j2 2.0-beta9 to 2.14.1']),
-        references: JSON.stringify(['https://nvd.nist.gov/vuln/detail/CVE-2021-44228']),
+        affectedProducts: ['Apache Log4j2 2.0-beta9 to 2.14.1'] as any,
+        references: ['https://nvd.nist.gov/vuln/detail/CVE-2021-44228'] as any,
         remediation: 'Upgrade Apache Log4j2 to 2.15.0 or higher, or set log4j2.formatMsgNoLookups=true.',
         patchAvailable: true,
       },
@@ -87,27 +87,27 @@ export class SeederService {
         title: 'Citrix NetScaler ADC and Gateway Remote Code Execution',
         description: 'Unauthenticated remote code execution vulnerability on Citrix NetScaler ADC and Gateway config interface.',
         cvssScore: 9.8,
-        severity: 'CRITICAL',
+        severity: AlertSeverity.CRITICAL,
         publishedDate: new Date('2023-07-18'),
         modifiedDate: new Date('2023-08-05'),
         isKnownExploited: true,
-        affectedProducts: JSON.stringify(['Citrix NetScaler Gateway < 13.1-49.13']),
-        references: JSON.stringify(['https://support.citrix.com/article/CTX561480']),
+        affectedProducts: ['Citrix NetScaler Gateway < 13.1-49.13'] as any,
+        references: ['https://support.citrix.com/article/CTX561480'] as any,
         remediation: 'Install vendor-provided security firmware update immediately.',
         patchAvailable: true,
       },
       {
         id: 'CVE-2024-21626',
-        title: 'runc Container Escape / File Descriptor Leak',
-        description: 'runc through 1.1.11 allows container breakout via file descriptor leaks during operations like exec.',
+        title: 'runc Container Breakout Vulnerability',
+        description: 'runc through 1.1.11 allows attackers to cause a container breakout and gain administrative host command execution.',
         cvssScore: 8.6,
-        severity: 'HIGH',
+        severity: AlertSeverity.HIGH,
         publishedDate: new Date('2024-01-31'),
         modifiedDate: new Date('2024-02-15'),
         isKnownExploited: false,
-        affectedProducts: JSON.stringify(['runc <= 1.1.11']),
-        references: JSON.stringify(['https://github.com/opencontainers/runc/security/advisories/GHSA-xr7r-f8xq-vx54']),
-        remediation: 'Update runc package to 1.1.12 or later version.',
+        affectedProducts: ['runc <= 1.1.11'] as any,
+        references: ['https://github.com/opencontainers/runc/security/advisories/GHSA-xr7r-f8xq-vx54'] as any,
+        remediation: 'Update runc tool to version 1.1.12 or later.',
         patchAvailable: true,
       },
     ];
@@ -115,23 +115,25 @@ export class SeederService {
     for (const vuln of vulnerabilities) {
       await this.prisma.vulnerability.upsert({
         where: { id: vuln.id },
-        update: {},
+        update: vuln,
         create: vuln,
       });
     }
 
     // 3. Seed 50 Assets
     const assetsData = [
-      { hostname: 'dc-01.threatsync.local', displayName: 'Domain Controller 01', type: 'SERVER', ipAddress: '192.0.2.10', criticality: 'CRITICAL', env: 'PROD', isInternet: false },
-      { hostname: 'sql-db-01.threatsync.local', displayName: 'Customer SQL Database', type: 'DATABASE', ipAddress: '192.0.2.22', criticality: 'CRITICAL', env: 'PROD', isInternet: false },
-      { hostname: 'web-gateway.threatsync.local', displayName: 'Public Web Proxy', type: 'NETWORK_DEVICE', ipAddress: '198.51.100.2', criticality: 'HIGH', env: 'PROD', isInternet: true },
-      { hostname: 'aws-s3-prod-assets', displayName: 'Production Storage Bucket', type: 'STORAGE_BUCKET', ipAddress: '198.51.100.25', criticality: 'HIGH', env: 'PROD', isInternet: true },
-      { hostname: 'k8s-node-01', displayName: 'Container Hosting Kubernetes Node', type: 'CLOUD_INSTANCE', ipAddress: '192.0.2.51', criticality: 'MEDIUM', env: 'PROD', isInternet: false },
-      { hostname: 'k8s-node-02', displayName: 'Kubernetes Workload Node 02', type: 'CLOUD_INSTANCE', ipAddress: '192.0.2.52', criticality: 'MEDIUM', env: 'PROD', isInternet: false },
-      { hostname: 'user-win10-01', displayName: 'Developer Workstation', type: 'WORKSTATION', ipAddress: '192.0.2.101', criticality: 'LOW', env: 'PROD', isInternet: false },
-      { hostname: 'user-mac-02', displayName: 'HR Manager Laptop', type: 'WORKSTATION', ipAddress: '192.0.2.102', criticality: 'LOW', env: 'PROD', isInternet: false },
-      { hostname: 'user-win10-03', displayName: 'Finance Specialist Desktop', type: 'WORKSTATION', ipAddress: '192.0.2.103', criticality: 'MEDIUM', env: 'PROD', isInternet: false },
-      { hostname: 'okta-idp-threatsync', displayName: 'Okta Identity Provider Tenant', type: 'APPLICATION', ipAddress: '203.0.113.88', criticality: 'CRITICAL', env: 'PROD', isInternet: true },
+      { hostname: 'dc-01.threatsync.local', displayName: 'Active Directory Domain Controller', type: AssetType.SERVER, ipAddress: '192.0.2.10', criticality: AssetCriticality.CRITICAL, env: Environment.PROD, isInternet: false },
+      { hostname: 'db-prod-01', displayName: 'Production PostgreSQL Cluster', type: AssetType.DATABASE, ipAddress: '192.0.2.20', criticality: AssetCriticality.CRITICAL, env: Environment.PROD, isInternet: false },
+      { hostname: 'web-gateway-01', displayName: 'Corporate Public Reverse Proxy', type: AssetType.API, ipAddress: '203.0.113.15', criticality: AssetCriticality.HIGH, env: Environment.PROD, isInternet: true },
+      { hostname: 'user-auth-api', displayName: 'OAuth Identity API Microservice', type: AssetType.API, ipAddress: '192.0.2.35', criticality: AssetCriticality.HIGH, env: Environment.PROD, isInternet: false },
+      { hostname: 'saas-salesforce-sync', displayName: 'Salesforce ETL Pipeline Worker', type: AssetType.APPLICATION, ipAddress: '192.0.2.80', criticality: AssetCriticality.MEDIUM, env: Environment.DEV, isInternet: true },
+      { hostname: 'backup-vault-01', displayName: 'Offline Archive Storage Vault', type: AssetType.SERVER, ipAddress: '192.0.2.222', criticality: AssetCriticality.CRITICAL, env: Environment.PROD, isInternet: false },
+      { hostname: 'k8s-node-01', displayName: 'Kubernetes Workload Node 01', type: AssetType.CLOUD_INSTANCE, ipAddress: '192.0.2.51', criticality: AssetCriticality.HIGH, env: Environment.PROD, isInternet: false },
+      { hostname: 'k8s-node-02', displayName: 'Kubernetes Workload Node 02', type: AssetType.CLOUD_INSTANCE, ipAddress: '192.0.2.52', criticality: AssetCriticality.MEDIUM, env: Environment.PROD, isInternet: false },
+      { hostname: 'user-win10-01', displayName: 'Developer Workstation', type: AssetType.WORKSTATION, ipAddress: '192.0.2.101', criticality: AssetCriticality.LOW, env: Environment.DEV, isInternet: false },
+      { hostname: 'user-mac-02', displayName: 'HR Manager Laptop', type: AssetType.WORKSTATION, ipAddress: '192.0.2.102', criticality: AssetCriticality.LOW, env: Environment.PROD, isInternet: false },
+      { hostname: 'user-win10-03', displayName: 'Finance Specialist Desktop', type: AssetType.WORKSTATION, ipAddress: '192.0.2.103', criticality: AssetCriticality.MEDIUM, env: Environment.PROD, isInternet: false },
+      { hostname: 'okta-idp-threatsync', displayName: 'Okta Identity Provider Tenant', type: AssetType.APPLICATION, ipAddress: '203.0.113.88', criticality: AssetCriticality.CRITICAL, env: Environment.PROD, isInternet: true },
     ];
 
     const seededAssets = [];
@@ -147,18 +149,18 @@ export class SeederService {
           environment: item.env,
           isInternetFacing: item.isInternet,
           monitoringStatus: 'ACTIVE',
-          riskScore: item.criticality === 'CRITICAL' ? 82.5 : item.criticality === 'HIGH' ? 64.0 : 35.0,
-          tags: JSON.stringify(['Seeded', item.env, item.type]),
+          riskScore: item.criticality === AssetCriticality.CRITICAL ? 82.5 : item.criticality === AssetCriticality.HIGH ? 64.0 : 35.0,
+          tags: ['Seeded', item.env, item.type] as any,
         },
       });
       seededAssets.push(asset);
     }
 
-    // Generate remaining 40 dummy assets to reach the 50 assets target
-    for (let i = 11; i <= 50; i++) {
+    // Generate remaining 38 dummy assets to reach the 50 assets target
+    for (let i = 13; i <= 50; i++) {
       const isWorkstation = i % 2 === 0;
-      const type = isWorkstation ? 'WORKSTATION' : 'CLOUD_INSTANCE';
-      const criticality = isWorkstation ? 'LOW' : 'MEDIUM';
+      const type = isWorkstation ? AssetType.WORKSTATION : AssetType.CLOUD_INSTANCE;
+      const criticality = isWorkstation ? AssetCriticality.LOW : AssetCriticality.MEDIUM;
       const hostname = `host-node-${i}.threatsync.local`;
 
       const asset = await this.prisma.asset.create({
@@ -169,11 +171,11 @@ export class SeederService {
           type,
           ipAddress: `192.0.2.${100 + i}`,
           businessCriticality: criticality,
-          environment: 'DEV',
+          environment: Environment.DEV,
           isInternetFacing: false,
           monitoringStatus: i % 15 === 0 ? 'OFFLINE' : 'ACTIVE',
           riskScore: Math.random() * 45,
-          tags: JSON.stringify(['AutoDiscover', 'DEV']),
+          tags: ['AutoDiscover', 'DEV'] as any,
         },
       });
       seededAssets.push(asset);
@@ -199,9 +201,9 @@ export class SeederService {
           firstDetected: new Date('2026-07-01'),
         },
         {
-          assetId: seededAssets[4].id, // k8s-node-01
+          assetId: seededAssets[6].id, // k8s-node-01
           cveId: 'CVE-2024-21626',
-          detectionMethod: 'Aqua Security Container Scanner',
+          detectionMethod: 'Prisma Cloud Defender',
           status: 'OPEN',
           dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           firstDetected: new Date('2026-07-05'),
@@ -209,80 +211,19 @@ export class SeederService {
       ],
     });
 
-    // Update asset vulnerability metrics
-    await this.prisma.asset.update({
-      where: { id: seededAssets[0].id },
-      data: { vulnerabilityCount: 1 },
-    });
-    await this.prisma.asset.update({
-      where: { id: seededAssets[2].id },
-      data: { vulnerabilityCount: 1 },
-    });
-    await this.prisma.asset.update({
-      where: { id: seededAssets[4].id },
-      data: { vulnerabilityCount: 1 },
-    });
+    // Increment vulnerability counts on target assets
+    await this.prisma.asset.update({ where: { id: seededAssets[0].id }, data: { vulnerabilityCount: { increment: 1 } } });
+    await this.prisma.asset.update({ where: { id: seededAssets[2].id }, data: { vulnerabilityCount: { increment: 1 } } });
+    await this.prisma.asset.update({ where: { id: seededAssets[6].id }, data: { vulnerabilityCount: { increment: 1 } } });
 
-    // 5. Seed 12 Incidents representing threat scenarios
+    // 5. Seed 12 Incidents
     const incidentsData = [
-      {
-        title: 'Unusual authentication activity on Domain Controller',
-        summary: 'Multiple failed Kerberos pre-authentication attempts detected targeting Administrator credentials within a short timeframe, followed by a successful login from a non-standard IP address.',
-        severity: 'CRITICAL',
-        priority: 'CRITICAL',
-        status: 'INVESTIGATING',
-        type: 'AUTHENTICATION_ANOMALY',
-        analystId: analyst1.id,
-        analystName: analyst1.user?.fullName,
-      },
-      {
-        title: 'Suspicious outbound connection from SQL Database',
-        summary: 'SQL Server process initiated network connections to external addresses classified as potential command channels. Threat volume of 1.4 GB transfer detected.',
-        severity: 'CRITICAL',
-        priority: 'HIGH',
-        status: 'CONTAINMENT_IN_PROGRESS',
-        type: 'DATA_EXFILTRATION',
-        analystId: analyst1.id,
-        analystName: analyst1.user?.fullName,
-      },
-      {
-        title: 'Citrix Web Gateway Remote Execution Exploitation',
-        summary: 'Traffic payload matching Citrix CVE-2023-3519 payload signatures was logged hitting Citrix Web Proxy interface, leading to spawn of unusual sub-processes.',
-        severity: 'HIGH',
-        priority: 'HIGH',
-        status: 'TRIAGED',
-        type: 'VULNERABILITY_EXPLOITATION',
-        analystId: analyst1.id,
-        analystName: analyst1.user?.fullName,
-      },
-      {
-        title: 'S3 Asset Storage Bucket public read permission enabled',
-        summary: 'AWS CloudTrail log identified modification of S3 policy enabling public read access to database archive assets. Discovered via automated compliance monitoring.',
-        severity: 'MEDIUM',
-        priority: 'MEDIUM',
-        status: 'RESOLVED',
-        type: 'CLOUD_MISCONFIGURATION',
-        analystId: manager.id,
-        analystName: manager.user?.fullName,
-      },
-      {
-        title: 'Admin AWS Root Login without MFA authentication',
-        summary: 'CloudTrail logged root login from unfamiliar IP address outside corporate VPN bounds, without completing multi-factor challenges.',
-        severity: 'HIGH',
-        priority: 'CRITICAL',
-        status: 'OPEN',
-        type: 'IDENTITY_COMPROMISE',
-      },
-      {
-        title: 'Malicious domain query hitting Web Gateway dns resolver',
-        summary: 'DNS resolutions from web proxy client resolved against host addresses associated with cobalt strike infrastructure beacons.',
-        severity: 'MEDIUM',
-        priority: 'MEDIUM',
-        status: 'CLOSED',
-        type: 'THREAT_INTEL_MATCH',
-        analystId: analyst1.id,
-        analystName: analyst1.user?.fullName,
-      },
+      { title: 'Critical Active Directory Domain Administrator Privilege Escalation', severity: AlertSeverity.CRITICAL, priority: AlertSeverity.CRITICAL, status: IncidentStatus.INVESTIGATING, type: 'PRIVILEGE_ESCALATION', analystId: analyst1.id, analystName: analyst1.user?.fullName || 'Sarah Connor' },
+      { title: 'Suspicious outbound command shell execution from SQL Database Cluster', severity: AlertSeverity.CRITICAL, priority: AlertSeverity.HIGH, status: IncidentStatus.OPEN, type: 'DATA_EXFILTRATION', analystId: undefined, analystName: undefined },
+      { title: 'Citrix NetScaler Gateway RCE exploitation attempt detected', severity: AlertSeverity.HIGH, priority: AlertSeverity.HIGH, status: IncidentStatus.TRIAGED, type: 'VULNERABILITY_EXPLOITATION', analystId: analyst1.id, analystName: analyst1.user?.fullName || 'Sarah Connor' },
+      { title: 'S3 Bucket policy public read permission manual modification override', severity: AlertSeverity.MEDIUM, priority: AlertSeverity.MEDIUM, status: IncidentStatus.CONTAINED, type: 'CLOUD_MISCONFIGURATION', analystId: analyst1.id, analystName: analyst1.user?.fullName || 'Sarah Connor' },
+      { title: 'AWS CloudTrail root console initialization anomaly', severity: AlertSeverity.HIGH, priority: AlertSeverity.MEDIUM, status: IncidentStatus.OPEN, type: 'IDENTITY_COMPROMISE', analystId: undefined, analystName: undefined },
+      { title: 'DNS beaconing matches known malware command and control telemetry', severity: AlertSeverity.MEDIUM, priority: AlertSeverity.MEDIUM, status: IncidentStatus.CLOSED, type: 'THREAT_INTEL_MATCH', analystId: analyst1.id, analystName: analyst1.user?.fullName || 'Sarah Connor' },
     ];
 
     const seededIncidents = [];
@@ -291,7 +232,7 @@ export class SeederService {
         data: {
           organizationId,
           title: item.title,
-          summary: item.summary,
+          summary: `Demo incident summary tracking details for ${item.title}.`,
           severity: item.severity,
           priority: item.priority,
           status: item.status,
@@ -300,7 +241,7 @@ export class SeederService {
           assignedAnalystName: item.analystName,
           detectionTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
           slaDeadline: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours SLA
-          tags: JSON.stringify(['Seeded', item.type]),
+          tags: ['Seeded', item.type] as any,
         },
       });
       seededIncidents.push(inc);
@@ -313,15 +254,15 @@ export class SeederService {
           organizationId,
           title: `Simulated Security Incident #${j}`,
           summary: 'Simulated low-severity log auditing alerts combined for security monitoring testing.',
-          severity: 'LOW',
-          priority: 'LOW',
-          status: 'RESOLVED',
+          severity: AlertSeverity.LOW,
+          priority: AlertSeverity.LOW,
+          status: IncidentStatus.RESOLVED,
           incidentType: 'POLICY_VIOLATION',
           assignedAnalystId: analyst1.id,
           assignedAnalystName: analyst1.user?.fullName,
           detectionTime: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
           resolutionTime: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
-          tags: JSON.stringify(['Simulated']),
+          tags: ['Simulated'] as any,
         },
       });
       seededIncidents.push(inc);
@@ -329,14 +270,14 @@ export class SeederService {
 
     // 6. Seed 150 Alerts and map them to Incidents
     const alertsConfig = [
-      { title: 'Failed administrator kerberos ticket request', category: 'AUTHENTICATION_ANOMALY', severity: 'HIGH', assetIdx: 0, incIdx: 0 },
-      { title: 'Brute-force password attempts on domain user accounts', category: 'AUTHENTICATION_ANOMALY', severity: 'MEDIUM', assetIdx: 0, incIdx: 0 },
-      { title: 'SQL Server process spawned cmd.exe command shell', category: 'ENDPOINT_ANOMALY', severity: 'CRITICAL', assetIdx: 1, incIdx: 1 },
-      { title: 'Database outbound transfer spike to unknown destination', category: 'DATA_EXFILTRATION', severity: 'HIGH', assetIdx: 1, incIdx: 1 },
-      { title: 'Web Gateway ingress request matches Citrix CVE exploit payload', category: 'VULNERABILITY_EXPLOITATION', severity: 'HIGH', assetIdx: 2, incIdx: 2 },
-      { title: 'S3 Access Policy public read enabled manually via AWS CLI', category: 'CLOUD_MISCONFIGURATION', severity: 'MEDIUM', assetIdx: 3, incIdx: 3 },
-      { title: 'AWS CloudTrail Root Session initialized outside corporate boundary', category: 'IDENTITY_COMPROMISE', severity: 'HIGH', assetIdx: 9, incIdx: 4 },
-      { title: 'DNS Resolution of Cobalt Strike Beaconing hostname', category: 'THREAT_INTEL_MATCH', severity: 'MEDIUM', assetIdx: 2, incIdx: 5 },
+      { title: 'Failed administrator kerberos ticket request', category: 'AUTHENTICATION_ANOMALY', severity: AlertSeverity.HIGH, assetIdx: 0, incIdx: 0 },
+      { title: 'Brute-force password attempts on domain user accounts', category: 'AUTHENTICATION_ANOMALY', severity: AlertSeverity.MEDIUM, assetIdx: 0, incIdx: 0 },
+      { title: 'SQL Server process spawned cmd.exe command shell', category: 'ENDPOINT_ANOMALY', severity: AlertSeverity.CRITICAL, assetIdx: 1, incIdx: 1 },
+      { title: 'Database outbound transfer spike to unknown destination', category: 'DATA_EXFILTRATION', severity: AlertSeverity.HIGH, assetIdx: 1, incIdx: 1 },
+      { title: 'Web Gateway ingress request matches Citrix CVE exploit payload', category: 'VULNERABILITY_EXPLOITATION', severity: AlertSeverity.HIGH, assetIdx: 2, incIdx: 2 },
+      { title: 'S3 Access Policy public read enabled manually via AWS CLI', category: 'CLOUD_MISCONFIGURATION', severity: AlertSeverity.MEDIUM, assetIdx: 3, incIdx: 3 },
+      { title: 'AWS CloudTrail Root Session initialized outside corporate boundary', category: 'IDENTITY_COMPROMISE', severity: AlertSeverity.HIGH, assetIdx: 9, incIdx: 4 },
+      { title: 'DNS Resolution of Cobalt Strike Beaconing hostname', category: 'THREAT_INTEL_MATCH', severity: AlertSeverity.MEDIUM, assetIdx: 2, incIdx: 5 },
     ];
 
     const seededAlerts = [];
@@ -356,17 +297,17 @@ export class SeederService {
           assetId: asset.id,
           ipAddress: asset.ipAddress,
           confidenceScore: 85.0,
-          rawEvent: JSON.stringify({
+          rawEvent: {
             eventId: `evt_${index}`,
             sensorName: 'SensorAgent',
             hostname: asset.hostname,
             ip: asset.ipAddress,
             matchedRules: [alertItem.title],
-          }),
+          } as any,
           incidentId: incident.id,
           assignedAnalystId: analyst1.id,
           assignedAnalystName: analyst1.user?.fullName,
-          tags: JSON.stringify(['ProductionSensor']),
+          tags: ['ProductionSensor'] as any,
         },
       });
       seededAlerts.push(alert);
@@ -381,7 +322,7 @@ export class SeederService {
     // Generate up to 150 alerts in a loop to fulfill the 150 alerts requirement
     for (let k = seededAlerts.length + 1; k <= 150; k++) {
       const asset = seededAssets[k % seededAssets.length];
-      const severity = k % 20 === 0 ? 'CRITICAL' : k % 10 === 0 ? 'HIGH' : k % 3 === 0 ? 'MEDIUM' : 'LOW';
+      const severity = k % 20 === 0 ? AlertSeverity.CRITICAL : k % 10 === 0 ? AlertSeverity.HIGH : k % 3 === 0 ? AlertSeverity.MEDIUM : AlertSeverity.LOW;
       
       await this.prisma.alert.create({
         data: {
@@ -395,12 +336,12 @@ export class SeederService {
           assetId: asset.id,
           ipAddress: asset.ipAddress,
           confidenceScore: 40.0 + Math.random() * 40,
-          rawEvent: JSON.stringify({
+          rawEvent: {
             eventId: `evt_auto_${k}`,
             payloadCheck: `Anomalous thread index ${k}`,
             ip: asset.ipAddress,
-          }),
-          tags: JSON.stringify(['AutomatedAudit']),
+          } as any,
+          tags: ['AutomatedAudit'] as any,
         },
       });
     }
@@ -418,12 +359,14 @@ export class SeederService {
         data: {
           organizationId,
           value: item.value,
-          type: item.type,
+          type: item.type as any,
           reputationScore: item.score,
-          label: item.label,
+          label: item.label as any,
           country: item.country,
           notes: item.notes,
           detectionCount: idx + 2,
+          associatedDomains: [] as any,
+          associatedFiles: [] as any,
         },
       });
 
@@ -433,14 +376,14 @@ export class SeederService {
           iocId: ioc.id,
           sourceName: 'VirusTotal-Mock',
           confidence: 90,
-          rawResponse: JSON.stringify({
+          rawResponse: {
             positives: 45,
             total: 68,
             scans: {
               Symantec: { detected: true, result: 'Trojan.C2' },
               Kaspersky: { detected: true, result: 'Backdoor.Win32' },
             },
-          }),
+          } as any,
         },
       });
     }
@@ -457,18 +400,20 @@ export class SeederService {
           label: 'UNKNOWN',
           country: isIP ? 'US' : undefined,
           notes: `Auto-enrolled investigation placeholder ${m}`,
+          associatedDomains: [] as any,
+          associatedFiles: [] as any,
         },
       });
     }
 
     // 8. Seed 12 Detection Rules
     const detectionRules = [
-      { name: 'Brute Force Attempts on SSH Port', category: 'AUTHENTICATION_ANOMALY', severity: 'MEDIUM', source: 'Linux SSH Service' },
-      { name: 'Spawn of cmd.exe Shell from Database Process', category: 'ENDPOINT_ANOMALY', severity: 'CRITICAL', source: 'SQL Database Audit' },
-      { name: 'S3 Policy Modification to Public Read Access', category: 'CLOUD_MISCONFIGURATION', severity: 'HIGH', source: 'AWS CloudTrail' },
-      { name: 'AWS Root Account Session without MFA', category: 'IDENTITY_COMPROMISE', severity: 'CRITICAL', source: 'AWS CloudTrail' },
-      { name: 'Citrix NetScaler Gateway Exploitation Signature', category: 'VULNERABILITY_EXPLOITATION', severity: 'CRITICAL', source: 'Web Proxy Traffic' },
-      { name: 'Cobalt Strike Malware C2 Address DNS resolution', category: 'THREAT_INTEL_MATCH', severity: 'HIGH', source: 'Internal DNS logs' },
+      { name: 'Brute Force Attempts on SSH Port', category: 'AUTHENTICATION_ANOMALY', severity: AlertSeverity.MEDIUM, source: 'Linux SSH Service' },
+      { name: 'Spawn of cmd.exe Shell from Database Process', category: 'ENDPOINT_ANOMALY', severity: AlertSeverity.CRITICAL, source: 'SQL Database Audit' },
+      { name: 'S3 Policy Modification to Public Read Access', category: 'CLOUD_MISCONFIGURATION', severity: AlertSeverity.HIGH, source: 'AWS CloudTrail' },
+      { name: 'AWS Root Account Session without MFA', category: 'IDENTITY_COMPROMISE', severity: AlertSeverity.CRITICAL, source: 'AWS CloudTrail' },
+      { name: 'Citrix NetScaler Gateway Exploitation Signature', category: 'VULNERABILITY_EXPLOITATION', severity: AlertSeverity.CRITICAL, source: 'Web Proxy Traffic' },
+      { name: 'Cobalt Strike Malware C2 Address DNS resolution', category: 'THREAT_INTEL_MATCH', severity: AlertSeverity.HIGH, source: 'Internal DNS logs' },
     ];
 
     for (const [idx, rule] of detectionRules.entries()) {
@@ -495,7 +440,7 @@ export class SeederService {
           name: `Simulated Custom Detection Rule #${r}`,
           description: `Monitors event metadata log values for policy compliance checks.`,
           category: 'POLICY_VIOLATION',
-          severity: 'LOW',
+          severity: AlertSeverity.LOW,
           dataSource: 'Syslog',
           queryDefinition: 'select * where severity == "LOW"',
         },
@@ -561,25 +506,14 @@ export class SeederService {
         source,
         action: 'PROCESS_AUDIT',
         outcome,
-        severity: s % 50 === 0 ? 'CRITICAL' : s % 20 === 0 ? 'HIGH' : 'LOW',
+        severity: s % 50 === 0 ? AlertSeverity.CRITICAL : s % 20 === 0 ? AlertSeverity.HIGH : AlertSeverity.LOW,
         message: msg,
         rawJson: JSON.stringify({ index: s, details: msg }),
       });
     }
     await this.prisma.securityEvent.createMany({ data: eventsData });
 
-    // 11. Seed 50 Notifications
-    const notificationsData = [];
-    for (let n = 1; n <= 50; n++) {
-      notificationsData.push({
-        // We simulate basic audit / notifications mapping in the app
-        // Since Notification model isn't created in SQLite models directly (it can be represented dynamically or in prisma)
-        // Wait, does schema.prisma have a Notification model? No, it has User, Org, Member, Session, Asset, Alert, Incident, Task, Comment, Evidence, IOC, Enrichment, Vulnerability, AssetVulnerability, SecurityEvent, DetectionRule, Integration, AuditLog.
-        // That's perfect, we can skip creating a separate Notification model or store it in AuditLog. Let's record notifications as audit logs or mock alert history.
-      });
-    }
-
-    // 12. Seed 200 Audit Log records
+    // 11. Seed 200 Audit Log records
     const auditData = [];
     const actions = [
       { act: 'USER_LOGIN', desc: 'User logged in successfully' },

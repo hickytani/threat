@@ -13,47 +13,42 @@ export class AssetsController {
   @Get()
   @HttpCode(HttpStatus.OK)
   async findAll(
-    @CurrentMember() member: ActiveMember,
     @Query('search') search?: string,
-    @Query('type') type?: string,
+    @Query('type') type?: any,
   ) {
-    return this.assetsService.findAll(member.organizationId, search, type);
+    return this.assetsService.findAll(search, type);
   }
 
   @Get(':assetId')
   @HttpCode(HttpStatus.OK)
   async findOne(
-    @CurrentMember() member: ActiveMember,
     @Param('assetId') assetId: string,
   ) {
-    return this.assetsService.findOne(member.organizationId, assetId);
+    return this.assetsService.findOne(assetId);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(
-    @CurrentMember() member: ActiveMember,
     @Body() data: any,
   ) {
-    return this.assetsService.create(member.organizationId, data);
+    return this.assetsService.create(data);
   }
 
   @Patch(':assetId')
   @HttpCode(HttpStatus.OK)
   async update(
-    @CurrentMember() member: ActiveMember,
     @Param('assetId') assetId: string,
     @Body() data: any,
   ) {
-    return this.assetsService.update(member.organizationId, assetId, data);
+    return this.assetsService.update(assetId, data);
   }
 
   @Delete(':assetId')
   @HttpCode(HttpStatus.OK)
   async remove(
-    @CurrentMember() member: ActiveMember,
     @Param('assetId') assetId: string,
   ) {
-    return this.assetsService.remove(member.organizationId, assetId);
+    return this.assetsService.remove(assetId);
   }
 }

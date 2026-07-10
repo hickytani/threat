@@ -13,13 +13,12 @@ export class IncidentsController {
   @Get()
   @HttpCode(HttpStatus.OK)
   async findAll(
-    @CurrentMember() member: ActiveMember,
-    @Query('status') status?: string,
-    @Query('severity') severity?: string,
-    @Query('priority') priority?: string,
+    @Query('status') status?: any,
+    @Query('severity') severity?: any,
+    @Query('priority') priority?: any,
     @Query('assigneeId') assigneeId?: string,
   ) {
-    return this.incidentsService.findAll(member.organizationId, {
+    return this.incidentsService.findAll({
       status,
       severity,
       priority,
@@ -30,38 +29,34 @@ export class IncidentsController {
   @Get(':incidentId')
   @HttpCode(HttpStatus.OK)
   async findOne(
-    @CurrentMember() member: ActiveMember,
     @Param('incidentId') incidentId: string,
   ) {
-    return this.incidentsService.findOne(member.organizationId, incidentId);
+    return this.incidentsService.findOne(incidentId);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(
-    @CurrentMember() member: ActiveMember,
     @Body() data: any,
     @Req() req: AuthenticatedRequest,
   ) {
     const userId = req.user?.id || '';
     const fullName = req.user?.fullName || 'SOC Analyst';
-    return this.incidentsService.create(member.organizationId, data, userId, fullName);
+    return this.incidentsService.create(data, userId, fullName);
   }
 
   @Patch(':incidentId')
   @HttpCode(HttpStatus.OK)
   async update(
-    @CurrentMember() member: ActiveMember,
     @Param('incidentId') incidentId: string,
     @Body() data: any,
   ) {
-    return this.incidentsService.update(member.organizationId, incidentId, data);
+    return this.incidentsService.update(incidentId, data);
   }
 
   @Post(':incidentId/comments')
   @HttpCode(HttpStatus.CREATED)
   async addComment(
-    @CurrentMember() member: ActiveMember,
     @Param('incidentId') incidentId: string,
     @Body('content') content: string,
     @Body('isInternalOnly') isInternalOnly: boolean,
@@ -69,40 +64,37 @@ export class IncidentsController {
   ) {
     const userId = req.user?.id || '';
     const authorName = req.user?.fullName || 'SOC Analyst';
-    return this.incidentsService.addComment(member.organizationId, incidentId, content, userId, authorName, isInternalOnly);
+    return this.incidentsService.addComment(incidentId, content, userId, authorName, isInternalOnly);
   }
 
   @Post(':incidentId/tasks')
   @HttpCode(HttpStatus.CREATED)
   async addTask(
-    @CurrentMember() member: ActiveMember,
     @Param('incidentId') incidentId: string,
     @Body() data: any,
   ) {
-    return this.incidentsService.addTask(member.organizationId, incidentId, data);
+    return this.incidentsService.addTask(incidentId, data);
   }
 
   @Patch(':incidentId/tasks/:taskId')
   @HttpCode(HttpStatus.OK)
   async updateTask(
-    @CurrentMember() member: ActiveMember,
     @Param('incidentId') incidentId: string,
     @Param('taskId') taskId: string,
     @Body() data: any,
   ) {
-    return this.incidentsService.updateTask(member.organizationId, incidentId, taskId, data);
+    return this.incidentsService.updateTask(incidentId, taskId, data);
   }
 
   @Post(':incidentId/evidence')
   @HttpCode(HttpStatus.CREATED)
   async addEvidence(
-    @CurrentMember() member: ActiveMember,
     @Param('incidentId') incidentId: string,
     @Body() data: any,
     @Req() req: AuthenticatedRequest,
   ) {
     const userId = req.user?.id || '';
     const userName = req.user?.fullName || 'SOC Analyst';
-    return this.incidentsService.addEvidence(member.organizationId, incidentId, data, userId, userName);
+    return this.incidentsService.addEvidence(incidentId, data, userId, userName);
   }
 }

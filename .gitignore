@@ -20,6 +20,10 @@ build/
 *.db-journal
 packages/database/dev.db
 packages/database/dev.db-journal
+packages/database/pgdata/
+packages/database/pg_engine_log.txt*
+logfile.txt*
+pg_engine_log.txt*
 
 # Environment secrets (CRITICAL)
 .env

@@ -1,29 +1,37 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Scope, NotFoundException } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
+import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
+import { AuthenticatedRequest } from '../auth/auth.interface.js';
 import { SeederService } from '../common/seeder.service.js';
 import { PatchOrganizationDto } from './organizations.dto.js';
 
-@Injectable()
-export class OrganizationsService {
+@Injectable({ scope: Scope.REQUEST })
+export class OrganizationsService extends TenantScopedRepository {
   constructor(
-    private prisma: PrismaService,
+    @Inject(REQUEST) request: AuthenticatedRequest,
+    prisma: PrismaService,
     private seeder: SeederService,
-  ) {}
+  ) {
+    super(request, prisma);
+  }
 
-  async update(id: string, dto: PatchOrganizationDto) {
-    const org = await this.prisma.organization.findUnique({ where: { id } });
+  async update(dto: PatchOrganizationDto) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: this.organizationId },
+    });
     if (!org) {
-      throw new NotFoundException(`Organization with ID ${id} not found`);
+      throw new NotFoundException(`Organization not found`);
     }
     return this.prisma.organization.update({
-      where: { id },
+      where: { id: this.organizationId },
       data: dto,
     });
   }
 
-  async getMembers(id: string) {
+  async getMembers() {
     return this.prisma.organizationMember.findMany({
-      where: { organizationId: id },
+      where: { organizationId: this.organizationId },
       include: {
         user: {
           select: {
@@ -37,7 +45,7 @@ export class OrganizationsService {
     });
   }
 
-  async seedDemo(id: string) {
-    return this.seeder.seedOrganization(id);
+  async seedDemo() {
+    return this.seeder.seedOrganization(this.organizationId);
   }
 }

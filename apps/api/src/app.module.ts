@@ -10,6 +10,7 @@ import { IncidentsModule } from './incidents/incidents.module.js';
 import { IntelligenceModule } from './intelligence/intelligence.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { VulnerabilitiesModule } from './vulnerabilities/vulnerabilities.module.js';
+import { QueuesModule } from './queues/queues.module.js';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { VulnerabilitiesModule } from './vulnerabilities/vulnerabilities.module.
     IntelligenceModule,
     AuditModule,
     VulnerabilitiesModule,
+    QueuesModule,
   ],
   controllers: [HealthController],
   providers: [RequestIdMiddleware],

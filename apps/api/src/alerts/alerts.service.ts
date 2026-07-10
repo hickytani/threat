@@ -1,21 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Scope, NotFoundException } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
+import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
+import { AuthenticatedRequest } from '../auth/auth.interface.js';
+import { AlertStatus, AlertSeverity, Prisma } from '@prisma/client';
 
-@Injectable()
-export class AlertsService {
-  constructor(private prisma: PrismaService) {}
-
-  async findAll(
-    organizationId: string,
-    filters: {
-      status?: string;
-      severity?: string;
-      category?: string;
-      assetId?: string;
-      search?: string;
-    },
+@Injectable({ scope: Scope.REQUEST })
+export class AlertsService extends TenantScopedRepository {
+  constructor(
+    @Inject(REQUEST) request: AuthenticatedRequest,
+    prisma: PrismaService,
   ) {
-    const where: any = { organizationId };
+    super(request, prisma);
+  }
+
+  async findAll(filters: {
+    status?: AlertStatus;
+    severity?: AlertSeverity;
+    category?: string;
+    assetId?: string;
+    search?: string;
+  }) {
+    const where: Prisma.AlertWhereInput = {
+      organizationId: this.organizationId,
+    };
 
     if (filters.status) where.status = filters.status;
     if (filters.severity) where.severity = filters.severity;
@@ -24,14 +32,14 @@ export class AlertsService {
 
     if (filters.search) {
       where.OR = [
-        { title: { contains: filters.search } },
-        { description: { contains: filters.search } },
-        { ipAddress: { contains: filters.search } },
-        { source: { contains: filters.search } },
+        { title: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+        { ipAddress: { contains: filters.search, mode: 'insensitive' } },
+        { source: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
-    const items = await this.prisma.alert.findMany({
+    return this.prisma.alert.findMany({
       where,
       orderBy: { timestamp: 'desc' },
       include: {
@@ -44,18 +52,14 @@ export class AlertsService {
         },
       },
     });
-
-    return items.map((alert) => ({
-      ...alert,
-      tags: JSON.parse(alert.tags),
-      mitreTechniques: JSON.parse(alert.mitreTechniques),
-      rawEvent: JSON.parse(alert.rawEvent),
-    }));
   }
 
-  async findOne(organizationId: string, id: string) {
+  async findOne(id: string) {
     const alert = await this.prisma.alert.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
       include: {
         asset: true,
         incident: {
@@ -72,34 +76,32 @@ export class AlertsService {
       throw new NotFoundException(`Alert with ID ${id} not found`);
     }
 
-    return {
-      ...alert,
-      tags: JSON.parse(alert.tags),
-      mitreTechniques: JSON.parse(alert.mitreTechniques),
-      rawEvent: JSON.parse(alert.rawEvent),
-    };
+    return alert;
   }
 
-  async update(organizationId: string, id: string, data: any) {
+  async update(id: string, data: any) {
     const alert = await this.prisma.alert.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
     });
 
     if (!alert) {
       throw new NotFoundException(`Alert with ID ${id} not found`);
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.AlertUpdateInput = {};
     if (data.status !== undefined) {
-      updateData.status = data.status;
+      updateData.status = data.status as AlertStatus;
       // Adjust activeAlertCount on assets if changing status
       if (alert.assetId) {
-        if (alert.status !== 'RESOLVED' && data.status === 'RESOLVED') {
+        if (alert.status !== AlertStatus.RESOLVED && data.status === AlertStatus.RESOLVED) {
           await this.prisma.asset.update({
             where: { id: alert.assetId },
             data: { activeAlertCount: { decrement: 1 } },
           });
-        } else if (alert.status === 'RESOLVED' && data.status !== 'RESOLVED') {
+        } else if (alert.status === AlertStatus.RESOLVED && data.status !== AlertStatus.RESOLVED) {
           await this.prisma.asset.update({
             where: { id: alert.assetId },
             data: { activeAlertCount: { increment: 1 } },
@@ -119,22 +121,18 @@ export class AlertsService {
       }
     }
 
-    const updated = await this.prisma.alert.update({
+    return this.prisma.alert.update({
       where: { id },
       data: updateData,
     });
-
-    return {
-      ...updated,
-      tags: JSON.parse(updated.tags),
-      mitreTechniques: JSON.parse(updated.mitreTechniques),
-      rawEvent: JSON.parse(updated.rawEvent),
-    };
   }
 
-  async createIncident(organizationId: string, alertId: string, userId: string, fullName: string) {
+  async createIncident(alertId: string, userId: string, fullName: string) {
     const alert = await this.prisma.alert.findFirst({
-      where: { id: alertId, organizationId },
+      where: {
+        id: alertId,
+        organizationId: this.organizationId,
+      },
     });
 
     if (!alert) {
@@ -144,18 +142,18 @@ export class AlertsService {
     // Create incident using details from the alert
     const incident = await this.prisma.incident.create({
       data: {
-        organizationId,
+        organizationId: this.organizationId,
         title: `Escalated: ${alert.title}`,
         summary: `Incident escalated from Alert ID ${alert.id}. Category: ${alert.category}. Description: ${alert.description}`,
         severity: alert.severity,
-        priority: alert.severity === 'CRITICAL' ? 'CRITICAL' : 'HIGH',
+        priority: alert.severity,
         status: 'OPEN',
         incidentType: alert.category,
         assignedAnalystId: userId,
         assignedAnalystName: fullName,
         detectionTime: alert.timestamp,
         slaDeadline: new Date(Date.now() + 4 * 60 * 60 * 1000), // 4 hours from now
-        tags: JSON.stringify(['Escalated']),
+        tags: ['Escalated'] as any,
       },
     });
 
@@ -164,22 +162,22 @@ export class AlertsService {
       where: { id: alertId },
       data: {
         incidentId: incident.id,
-        status: 'ESCALATED',
+        status: AlertStatus.ESCALATED,
       },
     });
 
     // Log the audit record
     await this.prisma.auditLog.create({
       data: {
-        organizationId,
+        organizationId: this.organizationId,
         actorId: userId,
-        actorEmail: '',
+        actorEmail: this.request.user?.email || '',
         action: 'ALERT_ESCALATION',
         resourceType: 'ALERT',
         resourceId: alertId,
-        requestId: 'req_' + Math.random().toString(36).substr(2, 9),
+        requestId: 'req_' + Math.random().toString(36).substring(2, 11),
         outcome: 'SUCCESS',
-        newValues: JSON.stringify({ incidentId: incident.id }),
+        newValues: { incidentId: incident.id } as any,
       },
     });
 

@@ -15,23 +15,22 @@ export class OrganizationsController {
   @UseGuards(TenantGuard)
   @HttpCode(HttpStatus.OK)
   async updateCurrent(
-    @CurrentMember() member: ActiveMember,
     @Body() dto: PatchOrganizationDto,
   ) {
-    return this.orgsService.update(member.organizationId, dto);
+    return this.orgsService.update(dto);
   }
 
   @Get('current/members')
   @UseGuards(TenantGuard)
   @HttpCode(HttpStatus.OK)
-  async getMembers(@CurrentMember() member: ActiveMember) {
-    return this.orgsService.getMembers(member.organizationId);
+  async getMembers() {
+    return this.orgsService.getMembers();
   }
 
   @Post('current/seed-demo')
   @UseGuards(TenantGuard)
   @HttpCode(HttpStatus.OK)
-  async seedDemo(@CurrentMember() member: ActiveMember) {
-    return this.orgsService.seedDemo(member.organizationId);
+  async seedDemo() {
+    return this.orgsService.seedDemo();
   }
 }

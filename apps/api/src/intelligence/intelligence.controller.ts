@@ -12,17 +12,16 @@ export class IntelligenceController {
 
   @Get('iocs')
   @HttpCode(HttpStatus.OK)
-  async getIocs(@CurrentMember() member: ActiveMember) {
-    return this.intelService.getIocs(member.organizationId);
+  async getIocs() {
+    return this.intelService.getIocs();
   }
 
   @Post('investigate')
   @HttpCode(HttpStatus.OK)
   async investigate(
-    @CurrentMember() member: ActiveMember,
     @Body('value') value: string,
     @Body('type') type: string,
   ) {
-    return this.intelService.investigate(member.organizationId, value, type);
+    return this.intelService.investigate(value, type);
   }
 }

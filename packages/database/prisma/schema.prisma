@@ -1,12 +1,100 @@
-// ThreatSync OS Database Schema
+// ThreatSync OS Modernized Database Schema (PostgreSQL)
 
 datasource db {
-  provider = "sqlite" // Can be switched to "postgresql" or driven by env in production
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
+}
+
+// User Access Roles
+enum UserRole {
+  SUPER_ADMIN
+  ORG_ADMIN
+  SOC_MANAGER
+  SECURITY_ANALYST
+  COMPLIANCE_VIEWER
+  EXECUTIVE_VIEWER
+}
+
+// Alert Severity Levels
+enum AlertSeverity {
+  INFORMATIONAL
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Alert Lifecycle Statuses
+enum AlertStatus {
+  NEW
+  INVESTIGATING
+  ESCALATED
+  RESOLVED
+}
+
+// Incident Lifecycle Statuses
+enum IncidentStatus {
+  OPEN
+  TRIAGED
+  INVESTIGATING
+  CONTAINMENT_IN_PROGRESS
+  CONTAINED
+  REMEDIATION_IN_PROGRESS
+  MONITORING
+  RESOLVED
+  CLOSED
+}
+
+// Asset Infrastructure Types
+enum AssetType {
+  SERVER
+  WORKSTATION
+  DATABASE
+  NETWORK_DEVICE
+  CLOUD_BUCKET
+  VIRTUAL_MACHINE
+  CLOUD_INSTANCE
+  CONTAINER
+  APPLICATION
+  API
+  USER_IDENTITY
+  SERVICE_ACCOUNT
+  STORAGE_BUCKET
+}
+
+// Asset Business Criticality Levels
+enum AssetCriticality {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Environment Categories
+enum Environment {
+  PROD
+  DEV
+  STAGING
+}
+
+// Remediation Task Statuses
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+// Evidence Scanning Statuses
+enum EvidenceStatus {
+  SCANNING
+  CLEAN
+  MALICIOUS
+  FAILED
 }
 
 // User Model
@@ -20,27 +108,29 @@ model User {
   updatedAt    DateTime             @updatedAt
   memberships  OrganizationMember[]
   sessions     Session[]
+
+  @@index([email])
 }
 
 // Organization Model (Tenant)
 model Organization {
-  id        String               @id @default(uuid())
-  name      String
-  size      String?
-  industry  String?
-  country   String?
-  timeZone  String?
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
-  members   OrganizationMember[]
-  assets    Asset[]
-  alerts    Alert[]
-  incidents Incident[]
-  iocs      IOC[]
-  events    SecurityEvent[]
-  rules     DetectionRule[]
+  id           String               @id @default(uuid())
+  name         String
+  size         String?
+  industry     String?
+  country      String?
+  timeZone     String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  members      OrganizationMember[]
+  assets       Asset[]
+  alerts       Alert[]
+  incidents    Incident[]
+  iocs         IOC[]
+  events       SecurityEvent[]
+  rules        DetectionRule[]
   integrations Integration[]
-  auditLogs AuditLog[]
+  auditLogs    AuditLog[]
 }
 
 // Organization Member Model (RBAC mapping)
@@ -48,7 +138,7 @@ model OrganizationMember {
   id             String       @id @default(uuid())
   organizationId String
   userId         String
-  role           String       // SUPER_ADMIN, ORG_ADMIN, SOC_MANAGER, SECURITY_ANALYST, COMPLIANCE_VIEWER, EXECUTIVE_VIEWER
+  role           UserRole     @default(SECURITY_ANALYST)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -61,18 +151,20 @@ model OrganizationMember {
 
 // Session Model (Session Revocation & Refresh Tokens)
 model Session {
-  id        String   @id @default(uuid())
-  userId    String
-  token     String   @unique
-  expiresAt DateTime
-  revoked   Boolean  @default(false)
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String        @id @default(uuid())
+  userId         String
+  organizationId String?       // Active tenant context bound to session
+  token          String        @unique
+  expiresAt      DateTime
+  revoked        Boolean       @default(false)
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([token])
 }
 
 // Asset Model
@@ -81,7 +173,7 @@ model Asset {
   organizationId      String
   hostname            String
   displayName         String
-  type                String               // WORKSTATION, SERVER, VM, etc.
+  type                AssetType            @default(WORKSTATION)
   operatingSystem     String?
   ipAddress           String
   macAddress          String?
@@ -89,14 +181,14 @@ model Asset {
   region              String?
   owner               String?
   department          String?
-  businessCriticality String               // LOW, MEDIUM, HIGH, CRITICAL
-  environment         String               // PROD, DEV, STAGING
+  businessCriticality AssetCriticality     @default(MEDIUM)
+  environment         Environment          @default(DEV)
   isInternetFacing    Boolean              @default(false)
   monitoringStatus    String               @default("ACTIVE") // ACTIVE, OFFLINE, DISCOVERED
   riskScore           Float                @default(0.0)      // 0 - 100
-  tags                String               @default("[]")     // JSON string array of tags
+  tags                Json                 @default("[]")     // Actual Postgres JSONB array
   vulnerabilityCount  Int                  @default(0)
-  activeAlertCount     Int                  @default(0)
+  activeAlertCount    Int                  @default(0)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -109,55 +201,59 @@ model Asset {
 
 // Alert Model
 model Alert {
-  id                  String       @id @default(uuid())
+  id                  String        @id @default(uuid())
   organizationId      String
   title               String
   description         String
-  severity            String       // INFORMATIONAL, LOW, MEDIUM, HIGH, CRITICAL
-  status              String       @default("NEW") // NEW, INVESTIGATING, ESCALATED, RESOLVED, etc.
-  category            String       // AUTHENTICATION_ANOMALY, Suspicious outbound, etc.
-  source              String       // CrowdStrike, Custom, etc.
+  severity            AlertSeverity @default(MEDIUM)
+  status              AlertStatus   @default(NEW)
+  category            String
+  source              String
   detectionRuleId     String?
   assetId             String?
   userIdentity        String?
   ipAddress           String?
   domain              String?
   fileHash            String?
-  confidenceScore     Float        @default(50.0)
-  rawEvent            String       @default("{}") // JSON string representation
+  confidenceScore     Float         @default(50.0)
+  rawEvent            Json          @default("{}")      // Actual Postgres JSONB payload
   assignedAnalystId   String?
   assignedAnalystName String?
   incidentId          String?
-  tags                String       @default("[]") // JSON string array of tags
-  mitreTechniques     String       @default("[]") // JSON string array of MITRE codes
-  timestamp           DateTime     @default(now())
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
-  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  asset               Asset?       @relation(fields: [assetId], references: [id], onDelete: SetNull)
-  incident            Incident?    @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  tags                Json          @default("[]")      // Actual Postgres JSONB array
+  mitreTechniques     Json          @default("[]")      // Actual Postgres JSONB array
+  timestamp           DateTime      @default(now())
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  organization        Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asset               Asset?        @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  incident            Incident?     @relation(fields: [incidentId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([assetId])
   @@index([incidentId])
   @@index([status])
   @@index([severity])
+  @@index([createdAt])
+  @@index([ipAddress])
+  @@index([domain])
+  @@index([fileHash])
 }
 
 // Incident Model
 model Incident {
-  id                  String            @id @default(uuid())
+  id                  String          @id @default(uuid())
   organizationId      String
   title               String
   summary             String
-  severity            String            // INFORMATIONAL, LOW, MEDIUM, HIGH, CRITICAL
-  priority            String            // LOW, MEDIUM, HIGH, CRITICAL
-  status              String            @default("OPEN") // OPEN, INVESTIGATING, RESOLVED, etc.
+  severity            AlertSeverity   @default(MEDIUM)
+  priority            AlertSeverity   @default(MEDIUM)
+  status              IncidentStatus  @default(OPEN)
   incidentType        String
   assignedAnalystId   String?
   assignedAnalystName String?
   assignedTeam        String?
-  detectionTime       DateTime          @default(now())
+  detectionTime       DateTime        @default(now())
   acknowledgedTime    DateTime?
   containmentTime     DateTime?
   resolutionTime      DateTime?
@@ -166,10 +262,10 @@ model Incident {
   impact              String?
   resolution          String?
   lessonsLearned      String?
-  tags                String            @default("[]") // JSON string array of tags
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  organization        Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tags                Json            @default("[]")      // Actual Postgres JSONB array
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  organization        Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   alerts              Alert[]
   tasks               IncidentTask[]
   comments            IncidentComment[]
@@ -177,24 +273,25 @@ model Incident {
 
   @@index([organizationId])
   @@index([status])
+  @@index([createdAt])
   @@index([assignedAnalystId])
 }
 
 // Incident Task Model
 model IncidentTask {
-  id                 String    @id @default(uuid())
+  id                 String     @id @default(uuid())
   incidentId         String
   title              String
   ownerId            String?
   ownerName          String?
-  priority           String    // LOW, MEDIUM, HIGH
+  priority           AlertSeverity @default(MEDIUM)
   dueDate            DateTime?
-  status             String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, BLOCKED
-  dependencies       String    @default("[]")      // JSON string array of task IDs
+  status             TaskStatus @default(PENDING)
+  dependencies       Json       @default("[]")      // Actual Postgres JSONB array
   completionEvidence String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  incident           Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  incident           Incident   @relation(fields: [incidentId], references: [id], onDelete: Cascade)
 
   @@index([incidentId])
 }
@@ -215,7 +312,7 @@ model IncidentComment {
 
 // Evidence Model
 model Evidence {
-  id             String   @id @default(uuid())
+  id             String         @id @default(uuid())
   incidentId     String
   fileName       String
   fileSize       Int
@@ -223,33 +320,33 @@ model Evidence {
   uploadedById   String
   uploadedByName String
   fileUrl        String
-  status         String   @default("SCANNING") // SCANNING, CLEAN, MALICIOUS, FAILED
-  createdAt      DateTime @default(now())
-  incident       Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  status         EvidenceStatus @default(SCANNING)
+  createdAt      DateTime       @default(now())
+  incident       Incident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
 
   @@index([incidentId])
 }
 
 // IOC Model
 model IOC {
-  id              String           @id @default(uuid())
-  organizationId  String
-  value           String
-  type            String           // IPV4, IPV6, DOMAIN, URL, MD5, SHA1, SHA256, CVE
-  reputationScore Float            @default(0.0) // 0 - 100
-  label           String           @default("UNKNOWN") // MALICIOUS, SUSPICIOUS, UNKNOWN, BENIGN
-  country         String?
-  asn             String?
-  associatedDomains String         @default("[]") // JSON string array
-  associatedFiles String           @default("[]") // JSON string array
-  detectionCount  Int              @default(0)
-  firstObserved   DateTime         @default(now())
-  lastObserved    DateTime         @default(now())
-  notes           String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  enrichments     IOCEnrichment[]
+  id                String          @id @default(uuid())
+  organizationId    String
+  value             String
+  type              String          // IPV4, IPV6, DOMAIN, URL, MD5, SHA1, SHA256, CVE
+  reputationScore   Float           @default(0.0) // 0 - 100
+  label             String          @default("UNKNOWN") // MALICIOUS, SUSPICIOUS, UNKNOWN, BENIGN
+  country           String?
+  asn               String?
+  associatedDomains Json            @default("[]") // Actual Postgres JSONB array
+  associatedFiles   Json            @default("[]") // Actual Postgres JSONB array
+  detectionCount    Int             @default(0)
+  firstObserved     DateTime        @default(now())
+  lastObserved      DateTime        @default(now())
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enrichments       IOCEnrichment[]
 
   @@unique([organizationId, value])
   @@index([organizationId])
@@ -263,7 +360,7 @@ model IOCEnrichment {
   sourceName  String   // VirusTotal, AbuseIPDB, etc.
   queryTime   DateTime @default(now())
   confidence  Float    @default(100.0)
-  rawResponse String   @default("{}") // JSON string payload
+  rawResponse Json     @default("{}") // Actual Postgres JSONB payload
   cacheAge    Int      @default(86400) // cache TTL in seconds
   ioc         IOC      @relation(fields: [iocId], references: [id], onDelete: Cascade)
 
@@ -276,12 +373,12 @@ model Vulnerability {
   title            String
   description      String
   cvssScore        Float
-  severity         String               // INFORMATIONAL, LOW, MEDIUM, HIGH, CRITICAL
+  severity         AlertSeverity        @default(MEDIUM)
   publishedDate    DateTime
   modifiedDate     DateTime
   isKnownExploited Boolean              @default(false)
-  affectedProducts String               @default("[]") // JSON string array
-  references       String               @default("[]") // JSON string array
+  affectedProducts Json                 @default("[]") // Actual Postgres JSONB array
+  references       Json                 @default("[]") // Actual Postgres JSONB array
   remediation      String?
   patchAvailable   Boolean              @default(true)
   assets           AssetVulnerability[]
@@ -312,9 +409,9 @@ model AssetVulnerability {
 
 // Security Event (SIEM logs) Model
 model SecurityEvent {
-  id             String       @id @default(uuid())
+  id             String        @id @default(uuid())
   organizationId String
-  timestamp      DateTime     @default(now())
+  timestamp      DateTime      @default(now())
   eventType      String
   source         String
   assetId        String?
@@ -322,12 +419,12 @@ model SecurityEvent {
   sourceIp       String?
   destinationIp  String?
   action         String
-  outcome        String       @default("UNKNOWN") // SUCCESS, FAILURE, BLOCKED, UNKNOWN
-  severity       String       @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
+  outcome        String        @default("UNKNOWN") // SUCCESS, FAILURE, BLOCKED, UNKNOWN
+  severity       AlertSeverity @default(LOW)
   message        String
-  metadata       String       @default("{}") // JSON string payload
+  metadata       Json          @default("{}")      // Actual Postgres JSONB payload
   rawJson        String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([timestamp])
@@ -335,44 +432,44 @@ model SecurityEvent {
 
 // Detection Rule Model
 model DetectionRule {
-  id             String       @id @default(uuid())
-  organizationId String
-  name           String
-  description    String
-  category       String
-  severity       String
-  isEnabled      Boolean      @default(true)
-  dataSource     String
-  queryDefinition String
-  matchConditions String      @default("{}") // JSON string
-  suppressionPeriod Int       @default(0)   // In seconds
-  tags           String       @default("[]") // JSON string array
-  mitreTechnique String?
-  author         String       @default("System")
-  version        Int          @default(1)
-  lastTriggered  DateTime?
-  triggerCount   Int          @default(0)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                String       @id @default(uuid())
+  organizationId    String
+  name              String
+  description       String
+  category          String
+  severity          String
+  isEnabled         Boolean      @default(true)
+  dataSource        String
+  queryDefinition   String
+  matchConditions   Json         @default("{}")      // Actual Postgres JSONB conditions
+  suppressionPeriod Int          @default(0)   // In seconds
+  tags              Json         @default("[]")      // Actual Postgres JSONB array
+  mitreTechnique    String?
+  author            String       @default("System")
+  version           Int          @default(1)
+  lastTriggered     DateTime?
+  triggerCount      Int          @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
 
 // Integration Model
 model Integration {
-  id             String       @id @default(uuid())
-  organizationId String
-  name           String
-  type           String       // IOC_INTEL, VULN_FEED, WEBHOOK, SLACK, etc.
-  isEnabled      Boolean      @default(false)
-  lastSync       DateTime?
-  health         String       @default("UNKNOWN") // OK, FAILED, UNKNOWN
-  configuration  String       @default("{}") // JSON string containing non-secret configurations
+  id                   String       @id @default(uuid())
+  organizationId       String
+  name                 String
+  type                 String       // IOC_INTEL, VULN_FEED, WEBHOOK, SLACK, etc.
+  isEnabled            Boolean      @default(false)
+  lastSync             DateTime?
+  health               String       @default("UNKNOWN") // OK, FAILED, UNKNOWN
+  configuration        Json         @default("{}")      // Actual Postgres JSONB configurations
   encryptedCredentials String? // Encrypted JSON string of keys/tokens
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
@@ -389,8 +486,8 @@ model AuditLog {
   timestamp      DateTime     @default(now())
   ipAddress      String?
   userAgent      String?
-  previousValues String?      // JSON string representation
-  newValues      String?      // JSON string representation
+  previousValues Json?        // Actual Postgres JSONB details
+  newValues      Json?        // Actual Postgres JSONB details
   requestId      String
   outcome        String       // SUCCESS, FAILURE
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

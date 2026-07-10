@@ -1,29 +1,32 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
+import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
+import { AuthenticatedRequest } from '../auth/auth.interface.js';
+import { Prisma } from '@prisma/client';
 
-@Injectable()
-export class IntelligenceService {
-  constructor(private prisma: PrismaService) {}
-
-  async getIocs(organizationId: string) {
-    const items = await this.prisma.iOC.findMany({
-      where: { organizationId },
-      orderBy: { lastObserved: 'desc' },
-    });
-
-    return items.map((ioc) => ({
-      ...ioc,
-      associatedDomains: JSON.parse(ioc.associatedDomains),
-      associatedFiles: JSON.parse(ioc.associatedFiles),
-    }));
+@Injectable({ scope: Scope.REQUEST })
+export class IntelligenceService extends TenantScopedRepository {
+  constructor(
+    @Inject(REQUEST) request: AuthenticatedRequest,
+    prisma: PrismaService,
+  ) {
+    super(request, prisma);
   }
 
-  async investigate(organizationId: string, value: string, type: string) {
+  async getIocs() {
+    return this.prisma.iOC.findMany({
+      where: { organizationId: this.organizationId },
+      orderBy: { lastObserved: 'desc' },
+    });
+  }
+
+  async investigate(value: string, type: string) {
     // Check if IOC is already cached
     let ioc = await this.prisma.iOC.findUnique({
       where: {
         organizationId_value: {
-          organizationId,
+          organizationId: this.organizationId,
           value,
         },
       },
@@ -33,17 +36,12 @@ export class IntelligenceService {
     });
 
     if (ioc) {
-      return {
-        ...ioc,
-        associatedDomains: JSON.parse(ioc.associatedDomains),
-        associatedFiles: JSON.parse(ioc.associatedFiles),
-        enrichments: ioc.enrichments.map(e => ({ ...e, rawResponse: JSON.parse(e.rawResponse) })),
-      };
+      return ioc;
     }
 
     // Generate mock reputation values
     const score = Math.floor(Math.random() * 85) + 15; // 15 - 100
-    let label: 'MALICIOUS' | 'SUSPICIOUS' | 'UNKNOWN' = 'SUSPICIOUS';
+    let label = 'SUSPICIOUS';
     if (score > 80) label = 'MALICIOUS';
     else if (score < 40) label = 'UNKNOWN';
 
@@ -59,15 +57,15 @@ export class IntelligenceService {
     // Create the IOC entry
     const newIoc = await this.prisma.iOC.create({
       data: {
-        organizationId,
+        organizationId: this.organizationId,
         value,
         type,
         reputationScore: score,
         label,
         country,
         asn,
-        associatedDomains: JSON.stringify(type === 'IPV4' ? [`reverse-dns-${value}.net`] : []),
-        associatedFiles: JSON.stringify(type === 'MD5' || type === 'SHA256' ? ['suspicious_temp_payload.exe'] : []),
+        associatedDomains: (type === 'IPV4' ? [`reverse-dns-${value}.net`] : []) as any,
+        associatedFiles: (type === 'MD5' || type === 'SHA256' ? ['suspicious_temp_payload.exe'] : []) as any,
         detectionCount: 1,
       },
     });
@@ -78,7 +76,7 @@ export class IntelligenceService {
         iocId: newIoc.id,
         sourceName: 'ThreatSync-Mock-Gateway',
         confidence: 85,
-        rawResponse: JSON.stringify({
+        rawResponse: {
           scans: {
             avast: { detected: label === 'MALICIOUS', result: 'Trojan.Agent' },
             sophos: { detected: label === 'MALICIOUS', result: 'Malware' },
@@ -87,18 +85,13 @@ export class IntelligenceService {
             threatCategory: type,
             scoreFactor: score,
           },
-        }),
+        } as any,
       },
     });
 
     return {
       ...newIoc,
-      associatedDomains: JSON.parse(newIoc.associatedDomains),
-      associatedFiles: JSON.parse(newIoc.associatedFiles),
-      enrichments: [{
-        ...enrich,
-        rawResponse: JSON.parse(enrich.rawResponse),
-      }],
+      enrichments: [enrich],
     };
   }
 }

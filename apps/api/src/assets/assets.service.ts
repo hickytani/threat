@@ -1,18 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Scope, NotFoundException } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
+import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
+import { AuthenticatedRequest } from '../auth/auth.interface.js';
+import { AssetType, AssetCriticality, Environment, Prisma } from '@prisma/client';
 
-@Injectable()
-export class AssetsService {
-  constructor(private prisma: PrismaService) {}
+@Injectable({ scope: Scope.REQUEST })
+export class AssetsService extends TenantScopedRepository {
+  constructor(
+    @Inject(REQUEST) request: AuthenticatedRequest,
+    prisma: PrismaService,
+  ) {
+    super(request, prisma);
+  }
 
-  async findAll(organizationId: string, search?: string, type?: string) {
-    const where: any = { organizationId };
+  async findAll(search?: string, type?: AssetType) {
+    const where: Prisma.AssetWhereInput = {
+      organizationId: this.organizationId,
+    };
 
     if (search) {
       where.OR = [
-        { hostname: { contains: search } },
-        { ipAddress: { contains: search } },
-        { displayName: { contains: search } },
+        { hostname: { contains: search, mode: 'insensitive' } },
+        { ipAddress: { contains: search, mode: 'insensitive' } },
+        { displayName: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -20,20 +31,18 @@ export class AssetsService {
       where.type = type;
     }
 
-    const items = await this.prisma.asset.findMany({
+    return this.prisma.asset.findMany({
       where,
       orderBy: { riskScore: 'desc' },
     });
-
-    return items.map(asset => ({
-      ...asset,
-      tags: JSON.parse(asset.tags),
-    }));
   }
 
-  async findOne(organizationId: string, id: string) {
+  async findOne(id: string) {
     const asset = await this.prisma.asset.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
       include: {
         alerts: {
           orderBy: { timestamp: 'desc' },
@@ -51,19 +60,16 @@ export class AssetsService {
       throw new NotFoundException(`Asset with ID ${id} not found`);
     }
 
-    return {
-      ...asset,
-      tags: JSON.parse(asset.tags),
-    };
+    return asset;
   }
 
-  async create(organizationId: string, data: any) {
-    const asset = await this.prisma.asset.create({
+  async create(data: any) {
+    return this.prisma.asset.create({
       data: {
-        organizationId,
+        organizationId: this.organizationId,
         hostname: data.hostname,
         displayName: data.displayName || data.hostname,
-        type: data.type,
+        type: data.type as AssetType,
         ipAddress: data.ipAddress,
         macAddress: data.macAddress,
         operatingSystem: data.operatingSystem,
@@ -71,52 +77,48 @@ export class AssetsService {
         region: data.region,
         owner: data.owner,
         department: data.department,
-        businessCriticality: data.businessCriticality || 'MEDIUM',
-        environment: data.environment || 'PROD',
+        businessCriticality: (data.businessCriticality as AssetCriticality) || AssetCriticality.MEDIUM,
+        environment: (data.environment as Environment) || Environment.DEV,
         isInternetFacing: data.isInternetFacing || false,
         monitoringStatus: 'ACTIVE',
-        tags: JSON.stringify(data.tags || []),
+        tags: data.tags || [],
       },
     });
-
-    return {
-      ...asset,
-      tags: JSON.parse(asset.tags),
-    };
   }
 
-  async update(organizationId: string, id: string, data: any) {
+  async update(id: string, data: any) {
     const asset = await this.prisma.asset.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
     });
 
     if (!asset) {
       throw new NotFoundException(`Asset with ID ${id} not found`);
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.AssetUpdateInput = {};
     if (data.hostname !== undefined) updateData.hostname = data.hostname;
     if (data.displayName !== undefined) updateData.displayName = data.displayName;
-    if (data.businessCriticality !== undefined) updateData.businessCriticality = data.businessCriticality;
+    if (data.businessCriticality !== undefined) updateData.businessCriticality = data.businessCriticality as AssetCriticality;
     if (data.monitoringStatus !== undefined) updateData.monitoringStatus = data.monitoringStatus;
     if (data.owner !== undefined) updateData.owner = data.owner;
     if (data.department !== undefined) updateData.department = data.department;
-    if (data.tags !== undefined) updateData.tags = JSON.stringify(data.tags);
+    if (data.tags !== undefined) updateData.tags = data.tags;
 
-    const updated = await this.prisma.asset.update({
+    return this.prisma.asset.update({
       where: { id },
       data: updateData,
     });
-
-    return {
-      ...updated,
-      tags: JSON.parse(updated.tags),
-    };
   }
 
-  async remove(organizationId: string, id: string) {
+  async remove(id: string) {
     const asset = await this.prisma.asset.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
     });
 
     if (!asset) {
