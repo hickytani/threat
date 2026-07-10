@@ -1,0 +1,44 @@
+name: ThreatSync OS CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js Environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+
+    - name: Install Project Dependencies
+      run: npm ci
+
+    - name: Generate Prisma Database Client
+      run: npm run generate --workspace=packages/database
+      env:
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/threatsync?schema=public"
+
+    - name: Compile Database Schema Package
+      run: npm run build --workspace=packages/database
+
+    - name: Compile Shared Types Workspace
+      run: npm run build --workspace=packages/shared-types
+
+    - name: Compile API Gateway Backend
+      run: npm run build --workspace=apps/api
+
+    - name: Compile React/Next.js Dashboard
+      run: npm run build --workspace=apps/web
+
+    - name: Run Backend Unit Test Suites
+      run: npm run test --workspace=apps/api -- --forceExit
