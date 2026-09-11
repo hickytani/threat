@@ -2,8 +2,8 @@ import { Inject, Injectable, Scope, NotFoundException } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
 import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
-import { AuthenticatedRequest } from '../auth/auth.interface.js';
-import { AssetType, AssetCriticality, Environment, Prisma } from '@prisma/client';
+import type { AuthenticatedRequest } from '../auth/auth.interface.js';
+import { AssetType, AssetCriticality, Environment, AlertSeverity, Prisma } from '@prisma/client';
 
 @Injectable({ scope: Scope.REQUEST })
 export class AssetsService extends TenantScopedRepository {
@@ -46,7 +46,7 @@ export class AssetsService extends TenantScopedRepository {
       include: {
         alerts: {
           orderBy: { timestamp: 'desc' },
-          take: 10,
+          take: 20,
         },
         vulnerabilities: {
           include: {
@@ -60,7 +60,157 @@ export class AssetsService extends TenantScopedRepository {
       throw new NotFoundException(`Asset with ID ${id} not found`);
     }
 
-    return asset;
+    const recentEvents = await this.prisma.securityEvent.findMany({
+      where: {
+        organizationId: this.organizationId,
+        assetId: id,
+        timestamp: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        },
+      },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    const riskSummary = this.buildRiskSummary(asset, recentEvents);
+
+    return {
+      ...asset,
+      riskSummary,
+    };
+  }
+
+  private buildRiskSummary(asset: any, recentEvents: any[]) {
+    const criticalityMap: Record<string, number> = {
+      [AssetCriticality.LOW]: 5,
+      [AssetCriticality.MEDIUM]: 12,
+      [AssetCriticality.HIGH]: 22,
+      [AssetCriticality.CRITICAL]: 30,
+    };
+
+    const criticalityScore = criticalityMap[String(asset.businessCriticality)] ?? 12;
+
+    const severityScore = {
+      [AlertSeverity.INFORMATIONAL]: 2,
+      [AlertSeverity.LOW]: 6,
+      [AlertSeverity.MEDIUM]: 10,
+      [AlertSeverity.HIGH]: 15,
+      [AlertSeverity.CRITICAL]: 24,
+    };
+
+    const contributors: Array<{ label: string; score: number; reason: string }> = [
+      {
+        label: 'criticality',
+        score: criticalityScore,
+        reason: `Asset criticality is ${asset.businessCriticality}, which contributes ${criticalityScore} risk points.`,
+      },
+    ];
+
+    let score = criticalityScore;
+
+    const activeAlerts = asset.alerts || [];
+    const activeAlertCount = activeAlerts.filter((alert: any) => alert.status !== 'RESOLVED').length;
+
+    if (activeAlertCount > 0) {
+      const alertScore = activeAlerts.reduce((total: number, alert: any) => total + (severityScore[alert.severity as AlertSeverity] ?? 0), 0);
+      score += alertScore;
+      contributors.push({
+        label: 'alerts',
+        score: alertScore,
+        reason: `Detected ${activeAlertCount} active alerts with cumulative severity weighting of ${alertScore}.`,
+      });
+    }
+
+    const openVulnerabilities = (asset.vulnerabilities || []).filter((entry: any) => entry.status === 'OPEN' || entry.status === 'EXCEPTION');
+    if (openVulnerabilities.length > 0) {
+      const vulnScore = openVulnerabilities.reduce((total: number, entry: any) => {
+        const vulnerability = entry.vulnerability || {};
+        const base = Number(vulnerability.cvssScore || 0) * 1.6;
+        return total + Math.round(base);
+      }, 0);
+      score += vulnScore;
+      contributors.push({
+        label: 'vulnerabilities',
+        score: vulnScore,
+        reason: `Open vulnerabilities on this asset contribute ${vulnScore} points, including ${openVulnerabilities.map((entry: any) => entry.cveId).join(', ')}.`,
+      });
+    }
+
+    const relatedIncidents = new Set(activeAlerts.filter((alert: any) => alert.incidentId).map((alert: any) => alert.incidentId));
+    if (relatedIncidents.size > 0) {
+      const incidentScore = Math.min(20, relatedIncidents.size * 8);
+      score += incidentScore;
+      contributors.push({
+        label: 'incidents',
+        score: incidentScore,
+        reason: `This asset is associated with ${relatedIncidents.size} incident(s), increasing risk by ${incidentScore} points.`,
+      });
+    }
+
+    const maliciousIocMatches = activeAlerts.filter((alert: any) => alert.rawEvent?.matchedIoc?.label === 'MALICIOUS').length;
+    if (maliciousIocMatches > 0) {
+      const intelligenceScore = Math.min(20, maliciousIocMatches * 10);
+      score += intelligenceScore;
+      contributors.push({
+        label: 'intelligence',
+        score: intelligenceScore,
+        reason: `Malicious IOC matches from alert evidence contribute ${intelligenceScore} points.`,
+      });
+    }
+
+    const suspiciousEvents = (recentEvents || []).filter((event: any) => event.outcome === 'FAILURE' || event.severity === AlertSeverity.HIGH || event.severity === AlertSeverity.CRITICAL);
+    if (suspiciousEvents.length > 0) {
+      const eventScore = Math.min(18, suspiciousEvents.length * 5);
+      score += eventScore;
+      contributors.push({
+        label: 'events',
+        score: eventScore,
+        reason: `${suspiciousEvents.length} recent suspicious security events add ${eventScore} points.`,
+      });
+    }
+
+    const recencyScore = this.calculateRecencyScore(recentEvents);
+    if (recencyScore > 0) {
+      score += recencyScore;
+      contributors.push({
+        label: 'recency',
+        score: recencyScore,
+        reason: `Recent activity within the last 7 days adds ${recencyScore} points.`,
+      });
+    }
+
+    const finalScore = Math.min(100, Math.max(0, Math.round(score)));
+
+    const orderedContributors = [...contributors].sort((a, b) => {
+      const labelWeight = { criticality: 0, intelligence: 1, vulnerabilities: 2, incidents: 3, alerts: 4, events: 5, recency: 6 };
+      return (labelWeight[a.label as keyof typeof labelWeight] ?? 99) - (labelWeight[b.label as keyof typeof labelWeight] ?? 99);
+    });
+
+    return {
+      score: finalScore,
+      contributors: orderedContributors,
+    };
+  }
+
+  private calculateRecencyScore(recentEvents: any[]) {
+    if (!recentEvents || recentEvents.length === 0) {
+      return 0;
+    }
+
+    const latest = recentEvents[0]?.timestamp ? new Date(recentEvents[0].timestamp).getTime() : 0;
+    const now = Date.now();
+    const ageHours = (now - latest) / (60 * 60 * 1000);
+
+    if (ageHours <= 24) {
+      return 10;
+    }
+    if (ageHours <= 72) {
+      return 6;
+    }
+    if (ageHours <= 168) {
+      return 3;
+    }
+
+    return 0;
   }
 
   async create(data: any) {

@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Shield, Key, Mail, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { apiRequest, persistSession } from '@/lib/api-client';
+import type { AuthSession } from 'shared-types';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,29 +20,12 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-      const response = await fetch(`${apiUrl}/auth/login`, {
+      const data = await apiRequest<AuthSession>('/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        // Parse customized API error response
-        throw new Error(data.error?.message || 'Invalid credentials or login failed');
-      }
-
-      // Successful login
-      // Token cookies access_token/refresh_token are set automatically as HttpOnly by backend.
-      // Store user metadata locally if needed.
-      localStorage.setItem('user', JSON.stringify(data.user));
-      localStorage.setItem('memberships', JSON.stringify(data.memberships));
-      
-      // Redirect to main onboarding setup wizard or dashboard
+      persistSession(data);
       router.push('/onboarding');
     } catch (err: any) {
       setError(err.message || 'Connection to authentication service failed.');

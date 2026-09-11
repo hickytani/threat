@@ -3,7 +3,7 @@ import { IntelligenceService } from './intelligence.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
 import { CurrentMember } from '../auth/current-member.decorator.js';
-import { ActiveMember } from '../auth/auth.interface.js';
+import type { ActiveMember } from '../auth/auth.interface.js';
 
 @Controller('intelligence')
 @UseGuards(JwtAuthGuard, TenantGuard)

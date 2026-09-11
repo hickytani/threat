@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Shield, Mail, Key, User, Building2, AlertCircle, ArrowRight, Loader2, Target, Users } from 'lucide-react';
+import { apiRequest } from '@/lib/api-client';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -29,12 +30,8 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-      const response = await fetch(`${apiUrl}/auth/register`, {
+      await apiRequest('/auth/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           fullName,
           email,
@@ -44,12 +41,6 @@ export default function RegisterPage() {
           securityGoal,
         }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Registration failed');
-      }
 
       // Successful registration
       router.push('/login?registered=true');

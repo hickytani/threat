@@ -3,13 +3,18 @@ import { OrganizationsService } from './organizations.service.js';
 import { PatchOrganizationDto } from './organizations.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
-import { CurrentMember } from '../auth/current-member.decorator.js';
-import { ActiveMember } from '../auth/auth.interface.js';
 
 @Controller('organizations')
 @UseGuards(JwtAuthGuard)
 export class OrganizationsController {
   constructor(private orgsService: OrganizationsService) {}
+
+  @Get('current')
+  @UseGuards(TenantGuard)
+  @HttpCode(HttpStatus.OK)
+  async getCurrent() {
+    return this.orgsService.getCurrent();
+  }
 
   @Patch('current')
   @UseGuards(TenantGuard)

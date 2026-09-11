@@ -1,5 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable, ForbiddenException, UnauthorizedException } from '@nestjs/common';
-import { AuthenticatedRequest } from './auth.interface.js';
+import type { AuthenticatedRequest } from './auth.interface.js';
 
 @Injectable()
 export class TenantGuard implements CanActivate {

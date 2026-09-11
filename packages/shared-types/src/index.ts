@@ -76,7 +76,7 @@ export interface Asset {
   tags: string[];
   vulnerabilityCount: number;
   activeAlertCount: number;
-  lastObserved: string;
+  lastObserved?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -281,6 +281,10 @@ export interface AssetVulnerability {
   lastDetected: string;
   createdAt: string;
   updatedAt: string;
+  asset?: {
+    hostname: string;
+    displayName: string;
+  };
   vulnerability?: Vulnerability;
 }
 
@@ -330,4 +334,64 @@ export interface ApiResponse<T = any> {
     requestId: string;
     details?: any[];
   };
+}
+
+export type ProviderStatus =
+  | 'SUCCESS'
+  | 'UNAVAILABLE'
+  | 'RATE_LIMITED'
+  | 'UNAUTHORIZED'
+  | 'ERROR'
+  | 'NOT_FOUND';
+
+export interface PaginationMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface OrganizationMembership {
+  id: string;
+  organizationId: string;
+  organizationName: string;
+  role: UserRole;
+}
+
+export interface AuthSession {
+  user: Pick<User, 'id' | 'email' | 'fullName'>;
+  memberships: OrganizationMembership[];
+}
+
+export interface ApiErrorResponse {
+  code: string;
+  message: string;
+  requestId?: string;
+  details?: Record<string, any>[];
+}
+
+export interface IntelligenceProviderResult {
+  provider: string;
+  status: ProviderStatus;
+  confidence?: number;
+  risk?: number;
+  observations?: string[];
+  retrievedAt?: string;
+  expiresAt?: string;
+  message?: string;
+}
+
+export interface IntelligenceInvestigationResult {
+  organizationId: string;
+  value: string;
+  type: IocType;
+  local: {
+    found: boolean;
+    iocs?: IOC[];
+    confidence?: number;
+    reputationScore?: number;
+    source?: string;
+    message?: string;
+  };
+  external: IntelligenceProviderResult;
 }

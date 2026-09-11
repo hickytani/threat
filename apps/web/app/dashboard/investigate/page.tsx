@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { BrainCircuit, Search, ShieldAlert, ShieldCheck, Activity, Globe, Cpu, Database, HeartPulse } from 'lucide-react';
+import { apiRequest, getActiveMembership } from '@/lib/api-client';
 
 export default function ForensicInvestigator() {
   const [value, setValue] = useState('');
@@ -19,27 +20,17 @@ export default function ForensicInvestigator() {
     setResult(null);
 
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const membership = getActiveMembership();
+      if (!membership) {
+        throw new Error('No active organization membership available.');
+      }
 
-      const res = await fetch(`${apiUrl}/intelligence/investigate`, {
+      const data = await apiRequest<any>('/intelligence/investigate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({ value, type })
       });
 
-      const data = await res.json();
-      if (res.ok) {
-        setResult(data);
-      } else {
-        throw new Error(data.error?.message || 'Investigation query failed');
-      }
+      setResult(data);
     } catch (err: any) {
       setError(err.message || 'Connection to intelligence provider failed.');
     } finally {

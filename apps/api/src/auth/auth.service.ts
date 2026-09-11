@@ -96,10 +96,13 @@ export class AuthService {
       },
     );
 
+    const activeOrganizationId = user.memberships[0]?.organizationId ?? null;
+
     // 2. Create session database record
     const session = await this.prisma.session.create({
       data: {
         userId: user.id,
+        organizationId: activeOrganizationId,
         token: refreshToken,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
         ipAddress,
@@ -169,9 +172,12 @@ export class AuthService {
       },
     );
 
+    const activeOrganizationId = session.organizationId ?? user.memberships[0]?.organizationId ?? null;
+
     const newSession = await this.prisma.session.create({
       data: {
         userId: user.id,
+        organizationId: activeOrganizationId,
         token: newRefreshToken,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         ipAddress,

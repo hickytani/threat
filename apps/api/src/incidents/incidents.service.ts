@@ -2,7 +2,7 @@ import { Inject, Injectable, Scope, NotFoundException } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
 import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
-import { AuthenticatedRequest } from '../auth/auth.interface.js';
+import type { AuthenticatedRequest } from '../auth/auth.interface.js';
 import { IncidentStatus, AlertSeverity, TaskStatus, EvidenceStatus, Prisma } from '@prisma/client';
 
 @Injectable({ scope: Scope.REQUEST })

@@ -2,8 +2,6 @@ import { Controller, Get, Patch, Body, Param, Query, UseGuards, HttpStatus, Http
 import { VulnerabilitiesService } from './vulnerabilities.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
-import { CurrentMember } from '../auth/current-member.decorator.js';
-import { ActiveMember } from '../auth/auth.interface.js';
 
 @Controller()
 @UseGuards(JwtAuthGuard, TenantGuard)

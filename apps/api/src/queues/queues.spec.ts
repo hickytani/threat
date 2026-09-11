@@ -51,6 +51,7 @@ describe('Queues and Correlation Engine', () => {
       },
       incident: {
         create: jest.fn(),
+        findMany: jest.fn(),
       },
       incidentComment: {
         create: jest.fn(),
@@ -139,6 +140,95 @@ describe('Queues and Correlation Engine', () => {
         where: { id: { in: ['alrt_1'] } },
         data: { incidentId: 'inc_corr_1', status: AlertStatus.ESCALATED },
       });
+    });
+
+    it('should include domain-linked activity in the alert correlation query', async () => {
+      const mockAlert = {
+        id: 'alrt_domain',
+        organizationId: 'org_1',
+        ipAddress: '10.0.0.8',
+        domain: 'c2.example.com',
+        category: 'THREAT_INTEL_MATCH',
+        severity: AlertSeverity.HIGH,
+        title: 'Domain-correlation test',
+      } as any;
+
+      prismaMock.alert.findMany.mockResolvedValue([
+        { id: 'alrt_2', assetId: 'ast_2', domain: 'c2.example.com' },
+      ]);
+      prismaMock.iOC.findFirst.mockResolvedValue(null);
+      prismaMock.incident.create.mockResolvedValue({ id: 'inc_domain_1' });
+
+      await correlationService.correlateAlert(mockAlert);
+
+      expect(prismaMock.alert.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({ domain: 'c2.example.com' }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('should avoid broad correlation when only a shared domain is observed without sufficient context', async () => {
+      const mockAlert = {
+        id: 'alrt_domain_low_context',
+        organizationId: 'org_1',
+        assetId: 'ast_new',
+        ipAddress: '10.0.0.8',
+        domain: 'c2.example.com',
+        category: 'THREAT_INTEL_MATCH',
+        severity: AlertSeverity.HIGH,
+        title: 'Low-context domain activity',
+      } as any;
+
+      prismaMock.alert.findMany.mockResolvedValue([
+        { id: 'alrt_2', assetId: 'ast_other', domain: 'c2.example.com' },
+      ]);
+      prismaMock.iOC.findFirst.mockResolvedValue(null);
+      prismaMock.incident.create.mockResolvedValue({ id: 'inc_domain_neg_1' });
+
+      const incident = await correlationService.correlateAlert(mockAlert);
+
+      expect(incident).toBeNull();
+      expect(prismaMock.incident.create).not.toHaveBeenCalled();
+    });
+
+    it('should not create a duplicate incident when a matching correlated incident already exists for the alert', async () => {
+      const mockAlert = {
+        id: 'alrt_existing',
+        organizationId: 'org_1',
+        assetId: 'ast_existing',
+        userIdentity: 'tenant-admin@example.com',
+        ipAddress: '198.51.100.20',
+        domain: 'malware-command-control.net',
+        category: 'AUTHENTICATION_ANOMALY',
+        severity: AlertSeverity.CRITICAL,
+        title: 'Existing correlated attack chain',
+      } as any;
+
+      prismaMock.alert.findMany.mockResolvedValue([]);
+      prismaMock.iOC.findFirst.mockResolvedValue(null);
+      prismaMock.incident.findMany.mockResolvedValue([
+        {
+          id: 'inc_existing',
+          organizationId: 'org_1',
+          incidentType: 'CORRELATED_THREAT_GROUP',
+          status: IncidentStatus.INVESTIGATING,
+          alerts: [
+            { id: 'alrt_existing', assetId: 'ast_existing', userIdentity: 'tenant-admin@example.com', ipAddress: '198.51.100.20', domain: 'malware-command-control.net' },
+            { id: 'alrt_companion', assetId: 'ast_existing', userIdentity: 'tenant-admin@example.com', ipAddress: '198.51.100.20', domain: 'malware-command-control.net' },
+          ],
+        },
+      ]);
+
+      const incident = await correlationService.correlateAlert(mockAlert);
+
+      expect(incident).toBeDefined();
+      expect(incident?.id).toBe('inc_existing');
+      expect(prismaMock.incident.create).not.toHaveBeenCalled();
     });
 
     it('should trigger lateral movement pattern escalation when 3 distinct assets trigger alerts within 1 hour', async () => {

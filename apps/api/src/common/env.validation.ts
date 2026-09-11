@@ -5,8 +5,8 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL environment variable is required"),
   JWT_SECRET: z.string().min(32, "JWT_SECRET environment variable is required and must be at least 32 characters"),
   JWT_REFRESH_SECRET: z.string().min(32).optional(),
-  REDIS_URL: z.string().min(1, "REDIS_URL environment variable is required"),
-  SESSION_SECRET: z.string().min(16, "SESSION_SECRET environment variable is required and must be at least 16 characters long"),
+  REDIS_URL: z.string().min(1).optional().default('redis://localhost:6379'),
+  SESSION_SECRET: z.string().min(16).optional(),
   AI_PROVIDER: z.enum(['google', 'openai', 'anthropic', 'mock']).default('mock'),
 });
 

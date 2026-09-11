@@ -14,18 +14,21 @@
 - **Tenant Security Guard:** Dynamic `TenantGuard` verifying active organizational membership. Passed verification tests.
 - **Public & Onboarding Forms:** Polished landing page, interactive login/register forms, and multi-step Onboarding Setup Wizard with seeder triggers.
 
-## Current Phase Roadmap (Phase 2 — UI System)
-- [ ] Initialize Design Tokens & CSS Variables
-- [ ] Implement Collapsible Sidebar & Top Navigation Layout Shell
-- [ ] Implement Responsive Page Headers & Dynamic KPI Cards
-- [ ] Implement Dense Alert & Asset Data Tables with Filters
-- [ ] Implement Drawer Navigation for Alerts / Incidents Context
+## Current Phase Roadmap (Phase 2 — Productionization)
+- [x] Harden environment validation and runtime config resilience
+- [x] Strengthen session-to-tenant binding and active organization context
+- [x] Extend event pipeline detection suppression and rule state tracking
+- [x] Expand API contract and documentation coverage
+- [ ] Complete end-to-end build/test verification for deployment artifacts and release notes
 
 ## Known Issues
-- None
+- Production deployment still assumes a PostgreSQL-backed runtime with optional Redis, but local development continues to use in-memory fallback behavior.
+- The frontend remains mostly static dashboard flows, with no live SSE/WebSocket streaming yet.
 
 ## Technical Debt
-- None
+- The current queue setup uses in-memory mocks for local development and should remain explicit about fallback expectations in release documentation.
+- The API contract docs should continue to be updated alongside controller/service changes.
 
 ## Next Tasks
-- Move to Phase 2 (UI System) by creating layout shells, navigation bars, and initial page frameworks.
+- Add deployment manifests, health checks, and CI release validation for the API and web apps.
+- Expand tests for more tenant-scoping and rule-suppression edge cases.

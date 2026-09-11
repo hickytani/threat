@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+import { apiRequest, getStoredSession } from '@/lib/api-client';
 import { 
   Shield, 
   LayoutDashboard, 
@@ -21,7 +22,9 @@ import {
   Menu, 
   X,
   Database,
-  Workflow
+  Workflow,
+  ShieldAlert,
+  Building2
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -34,30 +37,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    // Check credentials locally
-    const savedUser = localStorage.getItem('user');
-    const savedOrg = localStorage.getItem('memberships');
+    const session = getStoredSession();
 
-    if (!savedUser || !savedOrg) {
+    if (!session?.user || !session.memberships?.length) {
       router.push('/login');
       return;
     }
 
-    setUser(JSON.parse(savedUser));
-    const orgs = JSON.parse(savedOrg);
-    if (orgs.length > 0) {
-      setOrganization(orgs[0]);
-    }
+    setUser(session.user);
+    setOrganization(session.memberships[0]);
   }, [router]);
 
   const handleLogout = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-      await fetch(`${apiUrl}/auth/logout`, { method: 'POST' });
+      await apiRequest('/auth/logout', { method: 'POST' });
     } catch (err) {
       console.error('Logout request failed', err);
     }
-    
+
     localStorage.clear();
     router.push('/login');
   };
@@ -68,9 +65,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Alerts', href: '/dashboard/alerts', icon: AlertTriangle },
     { name: 'Incidents', href: '/dashboard/incidents', icon: Terminal },
     { name: 'Asset Registry', href: '/dashboard/assets', icon: Layers },
+    { name: 'IOC Registry', href: '/dashboard/ioc', icon: ShieldAlert },
     { name: 'Intelligence Hub', href: '/dashboard/investigate', icon: BrainCircuit },
     { name: 'Vulnerabilities', href: '/dashboard/vulnerabilities', icon: Database },
     { name: 'Audit Logs', href: '/dashboard/audit', icon: FileSpreadsheet },
+    { name: 'Organization', href: '/dashboard/organization', icon: Building2 },
+    { name: 'Settings', href: '/dashboard/settings', icon: Settings },
     { name: 'Compliance Checklist', href: '/dashboard/compliance', icon: Shield },
   ];
 

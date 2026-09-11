@@ -16,9 +16,15 @@ export class CorrelationService {
   async correlateAlert(alert: Alert) {
     this.logger.log(`Evaluating correlation rules for alert: id=${alert.id}, category=${alert.category}`);
 
+    const existingIncident = await this.findExistingCorrelatedIncident(alert);
+    if (existingIncident) {
+      this.logger.log(`Found existing correlated incident ${existingIncident.id} for alert ${alert.id}.`);
+      return existingIncident;
+    }
+
     const timeThreshold = new Date(Date.now() - 1 * 60 * 60 * 1000); // 1 hour sliding window
 
-    // Pattern 1: Same IP address or user identity across multiple distinct assets
+    // Pattern 1: Same IP address, domain, or user identity across multiple distinct assets
     const similarAlerts = await this.prisma.alert.findMany({
       where: {
         organizationId: alert.organizationId,
@@ -26,6 +32,7 @@ export class CorrelationService {
         timestamp: { gte: timeThreshold },
         OR: [
           alert.ipAddress ? { ipAddress: alert.ipAddress } : undefined,
+          alert.domain ? { domain: alert.domain } : undefined,
           alert.userIdentity ? { userIdentity: alert.userIdentity } : undefined,
         ].filter(Boolean) as any,
       },
@@ -129,7 +136,7 @@ export class CorrelationService {
           action: 'CORRELATION_AUTO_ESCALATION',
           resourceType: 'INCIDENT',
           resourceId: incident.id,
-          requestId: 'corr_' + Math.random().toString(36).substring(2, 11),
+          requestId: `corr_${Date.now().toString(36)}`,
           outcome: 'SUCCESS',
           newValues: { correlatedAlerts: correlatedAlertIds, reason: correlationReason } as any,
         },
@@ -139,5 +146,44 @@ export class CorrelationService {
     }
 
     return null;
+  }
+
+  private async findExistingCorrelatedIncident(alert: Alert) {
+    const incidentCandidates = (await this.prisma.incident.findMany({
+      where: {
+        organizationId: alert.organizationId,
+        incidentType: 'CORRELATED_THREAT_GROUP',
+        status: {
+          notIn: [IncidentStatus.RESOLVED, IncidentStatus.CLOSED],
+        },
+      },
+      include: {
+        alerts: true,
+      },
+    })) ?? [];
+
+    const evidenceKeys = [
+      alert.assetId,
+      alert.userIdentity,
+      alert.ipAddress,
+      alert.domain,
+    ].filter(Boolean) as string[];
+
+    if (evidenceKeys.length === 0) {
+      return null;
+    }
+
+    return incidentCandidates.find((incident: any) => {
+      return (incident.alerts || []).some((relatedAlert: any) => {
+        return evidenceKeys.some((key) => {
+          return (
+            (relatedAlert.assetId && key === relatedAlert.assetId) ||
+            (relatedAlert.userIdentity && key === relatedAlert.userIdentity) ||
+            (relatedAlert.ipAddress && key === relatedAlert.ipAddress) ||
+            (relatedAlert.domain && key === relatedAlert.domain)
+          );
+        });
+      });
+    }) || null;
   }
 }

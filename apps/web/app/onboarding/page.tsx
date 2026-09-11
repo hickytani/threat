@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { apiRequest, getStoredSession } from '@/lib/api-client';
 import { 
   Shield, 
   Building2, 
@@ -53,15 +54,14 @@ export default function OnboardingWizard() {
     { email: '', role: 'SECURITY_ANALYST' }
   ]);
 
-  // Load organization from localStorage (saved during login)
+  // Load organization from the authenticated session saved by the shared API client
   useEffect(() => {
-    const savedOrg = localStorage.getItem('memberships');
-    if (savedOrg) {
-      const orgs = JSON.parse(savedOrg);
-      if (orgs.length > 0) {
-        setOrganization(orgs[0]);
-        setProfile(p => ({ ...p, name: orgs[0].organizationName }));
-      }
+    const session = getStoredSession();
+    const activeMembership = session?.memberships?.[0];
+
+    if (activeMembership) {
+      setOrganization(activeMembership);
+      setProfile((p) => ({ ...p, name: activeMembership.organizationName }));
     }
   }, []);
 
@@ -117,13 +117,9 @@ export default function OnboardingWizard() {
         throw new Error('Organization ID context is missing.');
       }
 
-      // Step 1 & 2: Update Organization settings
-      await fetch(`${apiUrl}/organizations/current`, {
+      // Step 1 & 2: Update Organization settings using the authenticated tenant context
+      await apiRequest('/organizations/current', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId,
-        },
         body: JSON.stringify({
           size: profile.teamSize,
           industry: profile.industry,
@@ -132,15 +128,10 @@ export default function OnboardingWizard() {
         }),
       });
 
-      // If user selected demo data, hit the backend seed API
+      // If user selected demo data, seed the current tenant using the real backend endpoint
       if (assetMethod === 'demo' || alertSource === 'demo') {
-        // We will implement this endpoint in our mock seeder
-        await fetch(`${apiUrl}/organizations/current/seed-demo`, {
+        await apiRequest('/organizations/current/seed-demo', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-organization-id': orgId,
-          }
         });
       }
 

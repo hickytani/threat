@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { apiRequest, getActiveMembership } from '@/lib/api-client';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -42,71 +43,48 @@ export default function EventExplorer() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  const apiUrl = useMemo(() => {
-    return typeof window !== 'undefined'
-      ? window.location.origin.includes('3000')
-        ? 'http://localhost:3001/api/v1'
-        : '/api/v1'
-      : 'http://localhost:3001/api/v1';
-  }, []);
-
   const fetchData = useCallback(async () => {
     setLoadingGraph(true);
     try {
-      const [assetsRes, alertsRes, incidentsRes] = await Promise.all([
-        fetch(`${apiUrl}/assets`),
-        fetch(`${apiUrl}/alerts`),
-        fetch(`${apiUrl}/incidents`),
+      const membership = getActiveMembership();
+      if (!membership) {
+        setAssets([]);
+        setAlerts([]);
+        setIncidents([]);
+        setNodes([]);
+        setEdges([]);
+        return;
+      }
+
+      const [assetsData, alertsData, incidentsData] = await Promise.all([
+        apiRequest<any[]>(`/assets`),
+        apiRequest<any[]>(`/alerts`),
+        apiRequest<any[]>(`/incidents`),
       ]);
 
-      if (assetsRes.ok && alertsRes.ok && incidentsRes.ok) {
-        const assetsData = await assetsRes.json();
-        const alertsData = await alertsRes.json();
-        const incidentsData = await incidentsRes.json();
-
-        setAssets(assetsData);
-        setAlerts(alertsData);
-        setIncidents(incidentsData);
-        buildGraph(assetsData, alertsData, incidentsData);
-      } else {
-        throw new Error('Failed to load live catalog');
-      }
+      setAssets(Array.isArray(assetsData) ? assetsData : []);
+      setAlerts(Array.isArray(alertsData) ? alertsData : []);
+      setIncidents(Array.isArray(incidentsData) ? incidentsData : []);
+      buildGraph(
+        Array.isArray(assetsData) ? assetsData : [],
+        Array.isArray(alertsData) ? alertsData : [],
+        Array.isArray(incidentsData) ? incidentsData : [],
+      );
     } catch (err) {
-      console.warn('Backend not accessible, loading high-fidelity threat dataset simulation...');
-      loadSimulatedData();
+      console.error('Failed to load live catalog', err);
+      setAssets([]);
+      setAlerts([]);
+      setIncidents([]);
+      setNodes([]);
+      setEdges([]);
     } finally {
       setLoadingGraph(false);
     }
-  }, [apiUrl]);
+  }, [setEdges, setNodes]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  // Load High-Fidelity Simulation Dataset
-  const loadSimulatedData = () => {
-    const simAssets = [
-      { id: 'ast-dc', hostname: 'dc-01.threatsync.local', type: 'SERVER', ipAddress: '192.0.2.10', businessCriticality: 'CRITICAL', environment: 'PROD', activeAlertCount: 2 },
-      { id: 'ast-db', hostname: 'db-prod-01', type: 'DATABASE', ipAddress: '192.0.2.20', businessCriticality: 'CRITICAL', environment: 'PROD', activeAlertCount: 1 },
-      { id: 'ast-proxy', hostname: 'web-gateway-01', type: 'API', ipAddress: '203.0.113.15', businessCriticality: 'HIGH', environment: 'PROD', activeAlertCount: 1 },
-      { id: 'ast-dev', hostname: 'user-win10-01', type: 'WORKSTATION', ipAddress: '192.0.2.101', businessCriticality: 'LOW', environment: 'DEV', activeAlertCount: 0 }
-    ];
-
-    const simAlerts = [
-      { id: 'alrt-kerb', title: 'Failed administrator kerberos ticket request', category: 'AUTHENTICATION_ANOMALY', severity: 'HIGH', assetId: 'ast-dc', ipAddress: '192.0.2.10', timestamp: new Date(Date.now() - 300000).toISOString() },
-      { id: 'alrt-shell', title: 'SQL Server process spawned cmd.exe command shell', category: 'ENDPOINT_ANOMALY', severity: 'CRITICAL', assetId: 'ast-db', ipAddress: '192.0.2.20', timestamp: new Date(Date.now() - 100000).toISOString() },
-      { id: 'alrt-cve', title: 'Citrix CVE exploit payload matching pattern', category: 'VULNERABILITY_EXPLOITATION', severity: 'HIGH', assetId: 'ast-proxy', ipAddress: '203.0.113.15', timestamp: new Date().toISOString() }
-    ];
-
-    const simIncidents = [
-      { id: 'inc-lateral', title: 'Correlated Security Incident: Multi-Asset Threat Group', severity: 'CRITICAL', summary: 'Lateral threat movement pattern: Active alert footprints detected across 3 distinct server assets.' }
-    ];
-
-    setAssets(simAssets);
-    setAlerts(simAlerts);
-    setIncidents(simIncidents);
-    buildGraph(simAssets, simAlerts, simIncidents);
-  };
 
   // Convert DB/Sim objects into React Flow Nodes/Edges
   const buildGraph = (assetsList: any[], alertsList: any[], incidentsList: any[]) => {

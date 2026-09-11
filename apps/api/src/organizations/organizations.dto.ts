@@ -3,6 +3,10 @@ import { IsOptional, IsString } from 'class-validator';
 export class PatchOrganizationDto {
   @IsString()
   @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
   size?: string;
 
   @IsString()

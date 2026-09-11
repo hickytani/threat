@@ -15,6 +15,7 @@ import {
   FolderOpen,
   X
 } from 'lucide-react';
+import { apiRequest, getActiveMembership } from '@/lib/api-client';
 
 export default function IncidentsList() {
   const [loading, setLoading] = useState(true);
@@ -36,24 +37,21 @@ export default function IncidentsList() {
   const fetchIncidents = async () => {
     setLoading(true);
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      let queryParams = `?search=${search}`;
-      if (status) queryParams += `&status=${status}`;
-
-      const res = await fetch(`${apiUrl}/incidents${queryParams}`, {
-        headers: { 'x-organization-id': orgId }
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setIncidents(data);
+      const membership = getActiveMembership();
+      if (!membership) {
+        setIncidents([]);
+        return;
       }
+
+      const query = new URLSearchParams();
+      if (search) query.set('search', search);
+      if (status) query.set('status', status);
+
+      const data = await apiRequest<any[]>(`/incidents${query.size ? `?${query.toString()}` : ''}`);
+      setIncidents(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
+      setIncidents([]);
     } finally {
       setLoading(false);
     }
@@ -62,18 +60,8 @@ export default function IncidentsList() {
   const handleCreateIncident = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      const res = await fetch(`${apiUrl}/incidents`, {
+      await apiRequest<any>('/incidents', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({
           title,
           summary,
@@ -83,12 +71,10 @@ export default function IncidentsList() {
         })
       });
 
-      if (res.ok) {
-        setShowModal(false);
-        setTitle('');
-        setSummary('');
-        fetchIncidents();
-      }
+      setShowModal(false);
+      setTitle('');
+      setSummary('');
+      fetchIncidents();
     } catch (err) {
       console.error(err);
     }

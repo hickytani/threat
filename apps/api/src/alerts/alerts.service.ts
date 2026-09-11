@@ -2,7 +2,7 @@ import { Inject, Injectable, Scope, NotFoundException } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
 import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
-import { AuthenticatedRequest } from '../auth/auth.interface.js';
+import type { AuthenticatedRequest } from '../auth/auth.interface.js';
 import { AlertStatus, AlertSeverity, Prisma } from '@prisma/client';
 
 @Injectable({ scope: Scope.REQUEST })
@@ -175,7 +175,7 @@ export class AlertsService extends TenantScopedRepository {
         action: 'ALERT_ESCALATION',
         resourceType: 'ALERT',
         resourceId: alertId,
-        requestId: 'req_' + Math.random().toString(36).substring(2, 11),
+        requestId: `req_${Date.now().toString(36)}`,
         outcome: 'SUCCESS',
         newValues: { incidentId: incident.id } as any,
       },

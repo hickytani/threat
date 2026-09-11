@@ -13,7 +13,8 @@ ThreatSync OS is a production-quality, multi-tenant defensive security operation
 - **Cookie-Based Custom Auth:** Password hashing via `bcryptjs`, and tokens stored in secure, `HttpOnly`, `SameSite=Lax` cookies with automatic rotation and session database logs.
 - **Forensic Investigator Workspace:** On-demand indicators of compromise (IOC) checks (IP, domain, hash, CVE) with reputation parsing and caching.
 - **Incident Command Center:** Live checklist task trackers, analyst log updates, evidence file vault checks, and post-incident review (PIR) reports.
-- **AI Diagnostics Advisor:** Simulation playbook generation for incident resolution.
+- **Detection & Correlation Engine:** Ingested security events are normalized, deduplicated, matched against enabled detection rules, and optionally escalated into correlated incidents.
+- **Risk & Intelligence Layer:** Asset risk scoring, IOC enrichment, alert-to-incident correlation, and queue-driven workflow automation are implemented in the backend.
 - **Compliance Audit Trail:** Immutable records capturing administrative changes.
 
 ---
@@ -28,8 +29,8 @@ ThreatSync OS is a production-quality, multi-tenant defensive security operation
 
 ### Backend
 - **Framework:** NestJS API gateway with REST module controllers
-- **ORM & Database:** Prisma client resolving to SQLite local database file
-- **Security:** Passport, cookie-parser, class-validator
+- **ORM & Database:** Prisma client targeting PostgreSQL with tenant-scoped models, queue workers, and deterministic seed data
+- **Security:** JWT session validation, tenant enforcement, request IDs, cookie-parser, class-validator, and structured error handling
 
 ---
 
@@ -60,26 +61,33 @@ Run from the monorepo root directory:
 npm install
 ```
 
-### 2. Generate Prisma Client & Sync Database
-Generate the typescript mappings and push them directly to local SQLite database:
+### 2. Configure local services
+Make sure PostgreSQL and Redis are available locally, then copy the example environment file and adjust credentials if needed:
 ```bash
-$env:DATABASE_URL="file:./dev.db"; npm run push --workspace=packages/database
+copy .env.example .env
 ```
 
-### 3. Compile Shared Packages
+### 3. Generate Prisma Client & Sync Database
+Generate the TypeScript mappings and push the schema to the configured PostgreSQL database:
+```bash
+npm run db:generate
+npm run db:push
+```
+
+### 4. Compile Shared Packages
 Build shared type modules:
 ```bash
 npm run build --workspace=packages/shared-types
 npm run build --workspace=packages/database
 ```
 
-### 4. Seed baseline credentials
-Populate the database file with default organization settings:
+### 5. Seed baseline credentials
+Populate the database with the default SOC demo organization and login account:
 ```bash
-$env:DATABASE_URL="file:./dev.db"; npm run seed --workspace=packages/database
+npm run db:seed
 ```
 
-### 5. Launch both Servers
+### 6. Launch both Servers
 Start the NestJS API and Next.js frontend concurrently in development mode:
 - Run API (listening on `http://localhost:3001/api/v1`):
   ```bash

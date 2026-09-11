@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { apiRequest, getActiveMembership } from '@/lib/api-client';
 import { 
   Terminal, 
   Clock, 
@@ -49,23 +50,19 @@ export default function IncidentCommandCenter() {
   const fetchIncidentDetails = async () => {
     setLoading(true);
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      const res = await fetch(`${apiUrl}/incidents/${incidentId}`, {
-        headers: { 'x-organization-id': orgId }
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setIncident(data);
-        setRootCause(data.rootCause || '');
-        setResolution(data.resolution || '');
+      const membership = getActiveMembership();
+      if (!membership) {
+        setIncident(null);
+        return;
       }
+
+      const data = await apiRequest<any>(`/incidents/${incidentId}`);
+      setIncident(data);
+      setRootCause(data.rootCause || '');
+      setResolution(data.resolution || '');
     } catch (err) {
       console.error(err);
+      setIncident(null);
     } finally {
       setLoading(false);
     }
@@ -73,23 +70,16 @@ export default function IncidentCommandCenter() {
 
   const handleUpdateStatus = async (newStatus: string) => {
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const membership = getActiveMembership();
+      if (!membership) {
+        return;
+      }
 
-      const res = await fetch(`${apiUrl}/incidents/${incidentId}`, {
+      await apiRequest<any>(`/incidents/${incidentId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({ status: newStatus })
       });
-      if (res.ok) {
-        fetchIncidentDetails();
-      }
+      fetchIncidentDetails();
     } catch (err) {
       console.error(err);
     }
@@ -100,28 +90,21 @@ export default function IncidentCommandCenter() {
     if (!newComment.trim()) return;
 
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const membership = getActiveMembership();
+      if (!membership) {
+        return;
+      }
 
-      const res = await fetch(`${apiUrl}/incidents/${incidentId}/comments`, {
+      await apiRequest<any>(`/incidents/${incidentId}/comments`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({
           content: newComment,
           isInternalOnly: isInternalComment
         })
       });
 
-      if (res.ok) {
-        setNewComment('');
-        fetchIncidentDetails();
-      }
+      setNewComment('');
+      fetchIncidentDetails();
     } catch (err) {
       console.error(err);
     }
@@ -132,28 +115,21 @@ export default function IncidentCommandCenter() {
     if (!newTaskTitle.trim()) return;
 
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const membership = getActiveMembership();
+      if (!membership) {
+        return;
+      }
 
-      const res = await fetch(`${apiUrl}/incidents/${incidentId}/tasks`, {
+      await apiRequest<any>(`/incidents/${incidentId}/tasks`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({
           title: newTaskTitle,
           priority: 'MEDIUM'
         })
       });
 
-      if (res.ok) {
-        setNewTaskTitle('');
-        fetchIncidentDetails();
-      }
+      setNewTaskTitle('');
+      fetchIncidentDetails();
     } catch (err) {
       console.error(err);
     }
@@ -162,23 +138,16 @@ export default function IncidentCommandCenter() {
   const handleToggleTask = async (taskId: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const membership = getActiveMembership();
+      if (!membership) {
+        return;
+      }
 
-      const res = await fetch(`${apiUrl}/incidents/${incidentId}/tasks/${taskId}`, {
+      await apiRequest<any>(`/incidents/${incidentId}/tasks/${taskId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({ status: nextStatus })
       });
-      if (res.ok) {
-        fetchIncidentDetails();
-      }
+      fetchIncidentDetails();
     } catch (err) {
       console.error(err);
     }
@@ -187,24 +156,17 @@ export default function IncidentCommandCenter() {
   const handleSavePir = async () => {
     setUpdatingPir(true);
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const membership = getActiveMembership();
+      if (!membership) {
+        return;
+      }
 
-      const res = await fetch(`${apiUrl}/incidents/${incidentId}`, {
+      await apiRequest<any>(`/incidents/${incidentId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({ rootCause, resolution })
       });
-      if (res.ok) {
-        alert('Incident review details saved successfully!');
-        fetchIncidentDetails();
-      }
+      alert('Incident review details saved successfully!');
+      fetchIncidentDetails();
     } catch (err) {
       console.error(err);
     } finally {
@@ -213,37 +175,21 @@ export default function IncidentCommandCenter() {
   };
 
   const handleTriggerAI = () => {
-    setAiLoading(true);
-    setAiReport(null);
-
-    setTimeout(() => {
-      setAiReport(
-        `### Incident AI Advisory Summary\n\n` +
-        `**Attacker Vector:** Credential reuse leading to lateral movement across server targets.\n` +
-        `**Playbook Analysis:**\n` +
-        `- 3/4 tasks completed. Remaining step: Confirm Citrix netscaler patching has executed.\n` +
-        `- Log audits confirm zero database reads post-block execution. Risk level is contained.\n` +
-        `- Recommended Status transition: RESOLVED.\n\n` +
-        `*AI-generated summary. Verify audit tokens before closing ticket.*`
-      );
-      setAiLoading(false);
-    }, 1500);
+    setAiLoading(false);
+    setAiReport(
+      'AI-assisted diagnostics are not configured for this deployment. This incident workflow currently relies on deterministic backend state, audit records, and analyst review.'
+    );
   };
 
   const handleUploadEvidence = async () => {
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const membership = getActiveMembership();
+      if (!membership) {
+        return;
+      }
 
-      const res = await fetch(`${apiUrl}/incidents/${incidentId}/evidence`, {
+      await apiRequest<any>(`/incidents/${incidentId}/evidence`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({
           fileName: 'firewall_block_audit_log.txt',
           fileSize: 1024,
@@ -251,10 +197,8 @@ export default function IncidentCommandCenter() {
         })
       });
 
-      if (res.ok) {
-        alert('Mock evidence file logged in checklist.');
-        fetchIncidentDetails();
-      }
+      alert('Evidence placeholder logged through the backend incident workflow.');
+      fetchIncidentDetails();
     } catch (err) {
       console.error(err);
     }

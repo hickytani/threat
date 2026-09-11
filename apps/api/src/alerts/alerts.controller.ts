@@ -3,7 +3,7 @@ import { AlertsService } from './alerts.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
 import { CurrentMember } from '../auth/current-member.decorator.js';
-import { ActiveMember, AuthenticatedRequest } from '../auth/auth.interface.js';
+import type { ActiveMember, AuthenticatedRequest } from '../auth/auth.interface.js';
 
 @Controller('alerts')
 @UseGuards(JwtAuthGuard, TenantGuard)

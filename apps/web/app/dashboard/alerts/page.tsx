@@ -17,6 +17,7 @@ import {
   AlertCircle,
   ShieldAlert
 } from 'lucide-react';
+import { apiRequest, getActiveMembership } from '@/lib/api-client';
 
 export default function AlertsLedger() {
   const [loading, setLoading] = useState(true);
@@ -39,25 +40,22 @@ export default function AlertsLedger() {
   const fetchAlerts = async () => {
     setLoading(true);
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      let queryParams = `?search=${search}`;
-      if (severity) queryParams += `&severity=${severity}`;
-      if (status) queryParams += `&status=${status}`;
-
-      const res = await fetch(`${apiUrl}/alerts${queryParams}`, {
-        headers: { 'x-organization-id': orgId }
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setAlerts(data);
+      const membership = getActiveMembership();
+      if (!membership) {
+        setAlerts([]);
+        return;
       }
+
+      const query = new URLSearchParams();
+      if (search) query.set('search', search);
+      if (severity) query.set('severity', severity);
+      if (status) query.set('status', status);
+
+      const data = await apiRequest<any[]>(`/alerts${query.size ? `?${query.toString()}` : ''}`);
+      setAlerts(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error fetching alerts', err);
+      setAlerts([]);
     } finally {
       setLoading(false);
     }
@@ -70,23 +68,11 @@ export default function AlertsLedger() {
 
   const handleUpdateStatus = async (alertId: string, newStatus: string) => {
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      const res = await fetch(`${apiUrl}/alerts/${alertId}`, {
+      const updated = await apiRequest<any>(`/alerts/${alertId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({ status: newStatus })
       });
-      const updated = await res.json();
-      
-      // Update local state
+
       setAlerts(alerts.map(a => a.id === alertId ? { ...a, status: updated.status } : a));
       if (selectedAlert?.id === alertId) {
         setSelectedAlert({ ...selectedAlert, status: updated.status });
@@ -98,26 +84,10 @@ export default function AlertsLedger() {
 
   const handleEscalate = async (alertId: string) => {
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      const res = await fetch(`${apiUrl}/alerts/${alertId}/create-incident`, {
-        method: 'POST',
-        headers: {
-          'x-organization-id': orgId
-        }
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert('Alert escalated successfully! Incident created.');
-        fetchAlerts();
-        setSelectedAlert(null);
-      } else {
-        throw new Error(data.error?.message || 'Escalation failed');
-      }
+      await apiRequest<any>(`/alerts/${alertId}/create-incident`, { method: 'POST' });
+      alert('Alert escalated successfully! Incident created.');
+      fetchAlerts();
+      setSelectedAlert(null);
     } catch (err: any) {
       alert(`Escalation failed: ${err.message}`);
     }

@@ -2,38 +2,37 @@
 
 import React, { useState, useEffect } from 'react';
 import { Layers, Search, Server, Monitor, ShieldAlert, AlertCircle, Database, Network } from 'lucide-react';
+import type { Asset } from 'shared-types';
+import { apiRequest, getActiveMembership } from '@/lib/api-client';
 
 export default function AssetsRegistry() {
   const [loading, setLoading] = useState(true);
-  const [assets, setAssets] = useState<any[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
 
   useEffect(() => {
     fetchAssets();
-  }, [typeFilter]);
+  }, [search, typeFilter]);
 
   const fetchAssets = async () => {
     setLoading(true);
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      let queryParams = `?search=${search}`;
-      if (typeFilter) queryParams += `&type=${typeFilter}`;
-
-      const res = await fetch(`${apiUrl}/assets${queryParams}`, {
-        headers: { 'x-organization-id': orgId }
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setAssets(data);
+      const membership = getActiveMembership();
+      if (!membership) {
+        setAssets([]);
+        return;
       }
+
+      const query = new URLSearchParams();
+      if (search) query.set('search', search);
+      if (typeFilter) query.set('type', typeFilter);
+
+      const data = await apiRequest<Asset[]>(`/assets${query.size ? `?${query.toString()}` : ''}`);
+      setAssets(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
+      setAssets([]);
     } finally {
       setLoading(false);
     }

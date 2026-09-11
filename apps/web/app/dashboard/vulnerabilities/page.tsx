@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Database, Search, ShieldAlert, CheckCircle, RefreshCw } from 'lucide-react';
+import { Database, RefreshCw } from 'lucide-react';
+import type { AssetVulnerability } from 'shared-types';
+import { apiRequest } from '@/lib/api-client';
 
 export default function VulnerabilityManager() {
   const [loading, setLoading] = useState(true);
-  const [vulns, setVulns] = useState<any[]>([]);
+  const [vulns, setVulns] = useState<AssetVulnerability[]>([]);
 
   useEffect(() => {
     fetchVulnerabilities();
@@ -14,21 +16,11 @@ export default function VulnerabilityManager() {
   const fetchVulnerabilities = async () => {
     setLoading(true);
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      const res = await fetch(`${apiUrl}/asset-vulnerabilities`, {
-        headers: { 'x-organization-id': orgId }
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setVulns(data);
-      }
+      const data = await apiRequest<AssetVulnerability[]>('/asset-vulnerabilities');
+      setVulns(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
+      setVulns([]);
     } finally {
       setLoading(false);
     }
@@ -36,24 +28,13 @@ export default function VulnerabilityManager() {
 
   const handleRemediate = async (id: string) => {
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      const res = await fetch(`${apiUrl}/asset-vulnerabilities/${id}`, {
+      await apiRequest<AssetVulnerability>(`/asset-vulnerabilities/${id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': orgId
-        },
         body: JSON.stringify({ status: 'REMEDIATED' })
       });
-      if (res.ok) {
-        alert('Vulnerability status updated to Remediated.');
-        fetchVulnerabilities();
-      }
+
+      alert('Vulnerability status updated to Remediated.');
+      fetchVulnerabilities();
     } catch (err) {
       console.error(err);
     }

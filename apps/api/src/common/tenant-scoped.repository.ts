@@ -1,7 +1,7 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { PrismaService } from './prisma.service.js';
-import { AuthenticatedRequest } from '../auth/auth.interface.js';
+import type { AuthenticatedRequest } from '../auth/auth.interface.js';
 
 @Injectable({ scope: Scope.REQUEST })
 export class TenantScopedRepository {

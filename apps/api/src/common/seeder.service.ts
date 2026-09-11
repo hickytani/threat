@@ -174,7 +174,7 @@ export class SeederService {
           environment: Environment.DEV,
           isInternetFacing: false,
           monitoringStatus: i % 15 === 0 ? 'OFFLINE' : 'ACTIVE',
-          riskScore: Math.random() * 45,
+          riskScore: (i % 6) * 6 + 18,
           tags: ['AutoDiscover', 'DEV'] as any,
         },
       });
@@ -335,7 +335,7 @@ export class SeederService {
           source: 'DefenderEndpoint',
           assetId: asset.id,
           ipAddress: asset.ipAddress,
-          confidenceScore: 40.0 + Math.random() * 40,
+          confidenceScore: 40.0 + (k % 8) * 5,
           rawEvent: {
             eventId: `evt_auto_${k}`,
             payloadCheck: `Anomalous thread index ${k}`,
@@ -396,7 +396,7 @@ export class SeederService {
           organizationId,
           value: isIP ? `198.51.100.${100 + m}` : `threat-node-${m}.org`,
           type: isIP ? 'IPV4' : 'DOMAIN',
-          reputationScore: Math.random() * 30,
+          reputationScore: 25 + ((m % 5) * 15),
           label: 'UNKNOWN',
           country: isIP ? 'US' : undefined,
           notes: `Auto-enrolled investigation placeholder ${m}`,

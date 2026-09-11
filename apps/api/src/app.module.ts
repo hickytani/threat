@@ -11,6 +11,7 @@ import { IntelligenceModule } from './intelligence/intelligence.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { VulnerabilitiesModule } from './vulnerabilities/vulnerabilities.module.js';
 import { QueuesModule } from './queues/queues.module.js';
+import { EventsModule } from './events/events.module.js';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { QueuesModule } from './queues/queues.module.js';
     AuditModule,
     VulnerabilitiesModule,
     QueuesModule,
+    EventsModule,
   ],
   controllers: [HealthController],
   providers: [RequestIdMiddleware],

@@ -2,7 +2,7 @@ import { Inject, Injectable, Scope, NotFoundException } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { PrismaService } from '../common/prisma.service.js';
 import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
-import { AuthenticatedRequest } from '../auth/auth.interface.js';
+import type { AuthenticatedRequest } from '../auth/auth.interface.js';
 import { SeederService } from '../common/seeder.service.js';
 import { PatchOrganizationDto } from './organizations.dto.js';
 
@@ -14,6 +14,18 @@ export class OrganizationsService extends TenantScopedRepository {
     private seeder: SeederService,
   ) {
     super(request, prisma);
+  }
+
+  async getCurrent() {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: this.organizationId },
+    });
+
+    if (!org) {
+      throw new NotFoundException(`Organization not found`);
+    }
+
+    return org;
   }
 
   async update(dto: PatchOrganizationDto) {

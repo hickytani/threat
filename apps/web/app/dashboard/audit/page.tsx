@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { FileSpreadsheet, Lock, Activity, RefreshCw } from 'lucide-react';
+import { apiRequest, getActiveMembership } from '@/lib/api-client';
 
 export default function ComplianceAuditor() {
   const [loading, setLoading] = useState(true);
@@ -14,21 +15,17 @@ export default function ComplianceAuditor() {
   const fetchAuditLogs = async () => {
     setLoading(true);
     try {
-      const savedOrg = localStorage.getItem('memberships');
-      if (!savedOrg) return;
-      const org = JSON.parse(savedOrg)[0];
-      const orgId = org.organizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
-      const res = await fetch(`${apiUrl}/audit-logs`, {
-        headers: { 'x-organization-id': orgId }
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setLogs(data);
+      const membership = getActiveMembership();
+      if (!membership) {
+        setLogs([]);
+        return;
       }
+
+      const data = await apiRequest<any[]>('/audit-logs');
+      setLogs(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
+      setLogs([]);
     } finally {
       setLoading(false);
     }
