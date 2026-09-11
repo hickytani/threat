@@ -1,5 +1,18 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import { Outfit, Space_Grotesk } from 'next/font/google';
+
+const outfit = Outfit({
+  subsets: ['latin'],
+  variable: '--font-outfit',
+  display: 'swap',
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-space',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'ThreatSync OS — Security Operations & Investigation Platform',
@@ -12,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-[#030712] min-h-screen text-slate-100 flex flex-col antialiased">
+    <html lang="en" className={`dark ${outfit.variable} ${spaceGrotesk.variable}`}>
+      <body className="bg-[#020817] min-h-screen text-slate-100 flex flex-col antialiased font-sans">
         {children}
       </body>
     </html>

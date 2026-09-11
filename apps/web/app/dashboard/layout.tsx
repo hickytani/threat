@@ -90,36 +90,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex h-screen w-screen bg-[#030712] text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen w-screen bg-[#020817] text-slate-100 overflow-hidden font-sans relative">
       
       {/* Collapsible Sidebar */}
       <aside 
         className={`${
           sidebarOpen ? 'w-64' : 'w-16'
-        } bg-[#0b0f19] border-r border-slate-900 flex flex-col justify-between transition-all duration-300 z-35`}
+        } bg-[#0b0f19]/90 backdrop-blur-xl border-r border-slate-800/80 flex flex-col justify-between transition-all duration-300 z-35 shadow-2xl`}
       >
         <div className="flex flex-col">
           {/* Sidebar Header */}
-          <div className="h-16 flex items-center justify-between px-4 border-b border-slate-900 bg-slate-950/20">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <Shield className="h-6 w-6 text-cyan-400 flex-shrink-0" />
+          <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800/80 bg-slate-950/40">
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="h-8 w-8 rounded-lg bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400 flex-shrink-0">
+                <Shield className="h-4.5 w-4.5 text-cyan-400" />
+              </div>
               {sidebarOpen && (
-                <span className="font-bold text-sm tracking-wider text-white whitespace-nowrap">
-                  THREATSYNC <span className="text-cyan-400">OS</span>
+                <span className="font-mono font-bold text-sm tracking-wider text-white whitespace-nowrap">
+                  THREATSYNC <span className="text-cyan-400 text-xs px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-800">OS</span>
                 </span>
               )}
             </div>
             <button 
               type="button" 
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-slate-500 hover:text-white p-1 rounded hover:bg-slate-900 hidden md:block"
+              className="text-slate-500 hover:text-white p-1.5 rounded-lg hover:bg-slate-900 hidden md:block"
             >
               {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </button>
           </div>
 
           {/* Navigation Links */}
-          <nav className="mt-6 px-2 space-y-1">
+          <nav className="mt-4 px-2 space-y-1 overflow-y-auto max-h-[calc(100vh-140px)]">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
@@ -128,10 +130,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-xs font-semibold tracking-wide transition-all ${
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-mono font-semibold tracking-wide transition-all ${
                     isActive 
-                      ? 'bg-cyan-950/20 border-l-2 border-cyan-400 text-white' 
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
+                      ? 'bg-cyan-950/60 border border-cyan-500/40 text-cyan-400 shadow-md shadow-cyan-950/50' 
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
                   }`}
                   title={item.name}
                 >
@@ -144,23 +146,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Sidebar Footer (User details) */}
-        <div className="p-3 border-t border-slate-900 bg-slate-950/25">
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/40">
           <div className="flex items-center justify-between">
             {sidebarOpen && (
               <div className="flex items-center gap-2 overflow-hidden">
-                <div className="h-7 w-7 rounded-full bg-cyan-950 border border-cyan-800/40 flex items-center justify-center text-cyan-400 text-xs font-bold uppercase">
+                <div className="h-8 w-8 rounded-xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400 text-xs font-bold uppercase">
                   {user.fullName.charAt(0)}
                 </div>
                 <div className="overflow-hidden">
-                  <div className="text-xs font-bold text-white whitespace-nowrap truncate">{user.fullName}</div>
-                  <div className="text-[10px] text-slate-500 truncate uppercase tracking-wider">{organization.role.replace('_', ' ')}</div>
+                  <div className="text-xs font-mono font-bold text-white whitespace-nowrap truncate">{user.fullName}</div>
+                  <div className="text-[9px] font-mono text-cyan-400 truncate uppercase tracking-wider">{organization.role.replace('_', ' ')}</div>
                 </div>
               </div>
             )}
             
             <button
               onClick={handleLogout}
-              className="text-slate-500 hover:text-rose-400 p-1.5 rounded hover:bg-slate-900"
+              className="text-slate-500 hover:text-rose-400 p-2 rounded-lg hover:bg-slate-900 transition-colors"
               title="Sign Out"
             >
               <LogOut className="h-4.5 w-4.5" />
@@ -173,18 +175,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         
         {/* Top Header */}
-        <header className="h-16 border-b border-slate-900 bg-[#090d16] flex items-center justify-between px-6 z-20">
+        <header className="h-16 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl flex items-center justify-between px-6 z-20">
           
           {/* Org Name Indicator */}
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded border border-slate-800 bg-slate-950/40">
-              <span className="text-[10px] text-slate-500 font-bold uppercase">ACTIVE TENANT</span>
-              <span className="text-xs font-semibold text-cyan-400">{organization.organizationName}</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-cyan-500/30 bg-cyan-950/30 font-mono">
+              <span className="text-[9px] text-slate-400 font-bold uppercase">TENANT</span>
+              <span className="text-xs font-bold text-cyan-400">{organization.organizationName}</span>
             </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono">
-              <span className={`h-2 w-2 rounded-full ${healthStatus === 'healthy' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-              <span className="text-slate-400">SOC ENGINE:</span>
-              <span className={healthStatus === 'healthy' ? 'text-emerald-400' : 'text-amber-400 font-bold'}>
+            <div className="hidden sm:flex items-center gap-2 text-xs font-mono">
+              <span className={`h-2.5 w-2.5 rounded-full ${healthStatus === 'healthy' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span className="text-slate-400">SOC CLUSTER:</span>
+              <span className={healthStatus === 'healthy' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
                 {healthStatus.toUpperCase()}
               </span>
             </div>
@@ -202,19 +204,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 placeholder="Search IOCs, CVEs, Assets..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64 rounded-md border border-slate-800 bg-slate-950/60 pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                className="w-64 rounded-xl border border-slate-800 bg-slate-900/60 pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none font-mono"
               />
             </div>
 
-            {/* Profile Dropdown */}
+            {/* Profile Bell Notification */}
             <div className="flex items-center gap-2">
               <button 
                 type="button" 
-                className="relative p-1.5 rounded border border-slate-800 text-slate-400 hover:text-white bg-slate-950/20"
+                className="relative p-2 rounded-xl border border-slate-800 text-slate-400 hover:text-white bg-slate-900/60 hover:border-cyan-500/40 transition-all"
                 title="Telemetry Feeds"
               >
                 <Bell className="h-4 w-4" />
-                <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
               </button>
             </div>
           </div>
@@ -222,7 +224,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Route Pages Container */}
-        <main className="flex-1 overflow-y-auto bg-[#030712] relative">
+        <main className="flex-1 overflow-y-auto bg-[#020817] relative p-6">
           {children}
         </main>
       </div>
