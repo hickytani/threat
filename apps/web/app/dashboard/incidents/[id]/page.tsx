@@ -276,7 +276,7 @@ export default function IncidentInvestigationConsole() {
                   >
                     <div className="flex items-center justify-between text-xs font-bold text-white">
                       <span>{ast.displayName || ast.hostname}</span>
-                      <span className="text-xs font-mono text-cyan-400 font-bold">Risk: {ast.riskScore}%</span>
+                      <span className="text-xs font-mono text-cyan-400 font-bold">Risk: {ast.riskScore}/100</span>
                     </div>
                     <div className="text-[11px] font-mono text-slate-400 mt-1">IP: {ast.ipAddress} | Type: {ast.type}</div>
                   </Link>

@@ -209,7 +209,7 @@ export default function IocInvestigationPage() {
                     className="block p-3 rounded border border-slate-800 bg-slate-900/30 hover:border-cyan-500/50 transition-colors text-xs"
                   >
                     <div className="font-bold text-white">{ast.displayName || ast.hostname}</div>
-                    <div className="text-[10px] font-mono text-slate-400 mt-1">IP: {ast.ipAddress} | Risk: {ast.riskScore}%</div>
+                    <div className="text-[10px] font-mono text-slate-400 mt-1">IP: {ast.ipAddress} | Risk: {ast.riskScore}/100</div>
                   </Link>
                 ))}
               </div>

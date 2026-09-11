@@ -317,7 +317,7 @@ export default function SecurityOverviewDashboard() {
                     </div>
                     <div className="text-right">
                       <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Risk</div>
-                      <div className="text-sm font-semibold text-cyan-300">{Number(asset.riskScore || 0).toFixed(0)}%</div>
+                      <div className="text-sm font-semibold text-cyan-300">{Number(asset.riskScore || 0).toFixed(0)} / 100</div>
                     </div>
                   </div>
 

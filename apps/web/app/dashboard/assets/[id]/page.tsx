@@ -79,7 +79,7 @@ export default function AssetInvestigationPage() {
         <div className="flex items-center gap-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
           <div className="text-right">
             <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Calculated Risk Score</div>
-            <div className="text-2xl font-extrabold text-cyan-400">{assetDetail.riskScore || assetDetail.riskSummary?.score || 0}%</div>
+            <div className="text-2xl font-extrabold text-cyan-400">{assetDetail.riskScore || assetDetail.riskSummary?.score || 0} / 100</div>
           </div>
         </div>
       </div>
