@@ -232,6 +232,7 @@ model Alert {
   incident            Incident?     @relation(fields: [incidentId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
+  @@index([organizationId, timestamp])
   @@index([assetId])
   @@index([incidentId])
   @@index([status])
@@ -429,6 +430,10 @@ model SecurityEvent {
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+  @@index([organizationId, timestamp])
+  @@index([organizationId, assetId])
+  @@index([organizationId, eventType])
+  @@index([organizationId, sourceIp])
   @@index([timestamp])
 }
 
@@ -495,5 +500,6 @@ model AuditLog {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+  @@index([organizationId, resourceType, resourceId])
   @@index([timestamp])
 }

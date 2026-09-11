@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Search, ShieldAlert, Activity, Database, Globe } from 'lucide-react';
+
 import { apiRequest, getActiveMembership } from '@/lib/api-client';
 
 interface IocRow {
@@ -99,12 +101,17 @@ export default function IocRegistryPage() {
         <div className="text-center py-20 text-slate-500 font-mono">No IOCs are currently tracked for this tenant.</div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+
           {filteredIocs.map((ioc) => (
-            <div key={ioc.id} className="premium-card p-5 rounded-lg border border-slate-900 space-y-4">
+            <Link
+              key={ioc.id}
+              href={`/dashboard/ioc/${ioc.id}`}
+              className="premium-card p-5 rounded-lg border border-slate-900 space-y-4 hover:border-cyan-500/50 transition-colors block"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-400">{ioc.type}</div>
-                  <h3 className="mt-2 font-bold text-sm text-white break-all">{ioc.value}</h3>
+                  <h3 className="mt-2 font-bold text-sm text-white break-all hover:text-cyan-300">{ioc.value}</h3>
                 </div>
 
                 <span
@@ -175,9 +182,10 @@ export default function IocRegistryPage() {
                 <span className="flex items-center gap-1"><Globe className="h-3.5 w-3.5" /> {ioc.country || 'Unknown'}</span>
                 <span>{ioc.lastObserved ? new Date(ioc.lastObserved).toLocaleDateString() : 'Unobserved'}</span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
+
       )}
     </div>
   );

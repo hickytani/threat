@@ -34,6 +34,14 @@ export class IncidentsController {
     return this.incidentsService.findOne(incidentId);
   }
 
+  @Get(':incidentId/timeline')
+  @HttpCode(HttpStatus.OK)
+  async getTimeline(
+    @Param('incidentId') incidentId: string,
+  ) {
+    return this.incidentsService.getTimeline(incidentId);
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(

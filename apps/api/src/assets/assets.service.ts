@@ -4,14 +4,19 @@ import { PrismaService } from '../common/prisma.service.js';
 import { TenantScopedRepository } from '../common/tenant-scoped.repository.js';
 import type { AuthenticatedRequest } from '../auth/auth.interface.js';
 import { AssetType, AssetCriticality, Environment, AlertSeverity, Prisma } from '@prisma/client';
+import { buildDeterministicTimeline } from '../common/timeline.util.js';
+import { LocalThreatIntelProvider } from '../intelligence/threat-intel.provider.js';
 
 @Injectable({ scope: Scope.REQUEST })
 export class AssetsService extends TenantScopedRepository {
+  private readonly localIntelProvider: LocalThreatIntelProvider;
+
   constructor(
     @Inject(REQUEST) request: AuthenticatedRequest,
     prisma: PrismaService,
   ) {
     super(request, prisma);
+    this.localIntelProvider = new LocalThreatIntelProvider(prisma);
   }
 
   async findAll(search?: string, type?: AssetType) {
@@ -34,6 +39,7 @@ export class AssetsService extends TenantScopedRepository {
     return this.prisma.asset.findMany({
       where,
       orderBy: { riskScore: 'desc' },
+      take: 100,
     });
   }
 
@@ -45,6 +51,9 @@ export class AssetsService extends TenantScopedRepository {
       },
       include: {
         alerts: {
+          include: {
+            incident: true,
+          },
           orderBy: { timestamp: 'desc' },
           take: 20,
         },
@@ -60,23 +69,71 @@ export class AssetsService extends TenantScopedRepository {
       throw new NotFoundException(`Asset with ID ${id} not found`);
     }
 
+    // 1. Recent Events
     const recentEvents = await this.prisma.securityEvent.findMany({
       where: {
         organizationId: this.organizationId,
-        assetId: id,
-        timestamp: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-        },
+        OR: [
+          { assetId: id },
+          { sourceIp: asset.ipAddress },
+          { destinationIp: asset.ipAddress },
+        ],
       },
       orderBy: { timestamp: 'desc' },
+      take: 20,
     });
 
+    // 2. Calculated Risk Summary
     const riskSummary = this.buildRiskSummary(asset, recentEvents);
+
+    // 3. Incidents linked to asset's alerts
+    const incidentMap = new Map();
+    for (const alert of asset.alerts) {
+      if (alert.incident && !incidentMap.has(alert.incident.id)) {
+        incidentMap.set(alert.incident.id, alert.incident);
+      }
+    }
+    const incidents = Array.from(incidentMap.values());
+
+    // 4. Related IOCs
+    const iocValues = [asset.ipAddress, asset.hostname].filter(Boolean);
+    const hasIocFindMany = Boolean(this.prisma.iOC && typeof this.prisma.iOC.findMany === 'function');
+    const relatedIocs = (iocValues.length > 0 && hasIocFindMany)
+      ? await this.prisma.iOC.findMany({
+          where: {
+            organizationId: this.organizationId,
+            value: { in: iocValues },
+          },
+          take: 20,
+        })
+      : [];
+
+    // 5. Intelligence relationships
+    const hasIocFindUnique = Boolean(this.prisma.iOC && typeof this.prisma.iOC.findUnique === 'function');
+    const intelligence = (asset.ipAddress && hasIocFindUnique)
+      ? await this.localIntelProvider.investigate(this.organizationId, asset.ipAddress, 'IPV4')
+      : null;
+
+    // 6. Timeline
+    const timeline = buildDeterministicTimeline({
+      securityEvents: recentEvents,
+      alerts: asset.alerts,
+    });
 
     return {
       ...asset,
       riskSummary,
+      recentEvents,
+      incidents,
+      relatedIocs,
+      intelligence,
+      timeline,
     };
+  }
+
+  async getTimeline(id: string) {
+    const assetDetail = await this.findOne(id);
+    return assetDetail.timeline;
   }
 
   private buildRiskSummary(asset: any, recentEvents: any[]) {

@@ -42,6 +42,7 @@ export class AlertsService extends TenantScopedRepository {
     return this.prisma.alert.findMany({
       where,
       orderBy: { timestamp: 'desc' },
+      take: 100,
       include: {
         asset: {
           select: {
@@ -67,6 +68,7 @@ export class AlertsService extends TenantScopedRepository {
             id: true,
             title: true,
             status: true,
+            severity: true,
           },
         },
       },
@@ -76,7 +78,59 @@ export class AlertsService extends TenantScopedRepository {
       throw new NotFoundException(`Alert with ID ${id} not found`);
     }
 
-    return alert;
+    const rawEvent = (alert.rawEvent || {}) as Record<string, any>;
+    const matchedConditions = rawEvent.matchedConditions || {};
+    const detectionReason = alert.description || `Rule triggered for category ${alert.category}`;
+
+    // Detection Rule
+    let detectionRule: any = null;
+    if (alert.detectionRuleId) {
+      detectionRule = await this.prisma.detectionRule.findFirst({
+        where: {
+          id: alert.detectionRuleId,
+          organizationId: this.organizationId,
+        },
+      });
+    }
+
+    // Contributing Events
+    const eventOrConditions: Prisma.SecurityEventWhereInput[] = [];
+    if (rawEvent.eventId) eventOrConditions.push({ id: rawEvent.eventId });
+    if (alert.assetId) eventOrConditions.push({ assetId: alert.assetId });
+    if (alert.ipAddress) eventOrConditions.push({ sourceIp: alert.ipAddress });
+    if (alert.userIdentity) eventOrConditions.push({ userIdentity: alert.userIdentity });
+
+    const contributingEvents = eventOrConditions.length > 0
+      ? await this.prisma.securityEvent.findMany({
+          where: {
+            organizationId: this.organizationId,
+            OR: eventOrConditions,
+          },
+          orderBy: { timestamp: 'desc' },
+          take: 10,
+        })
+      : [];
+
+    // Matched IOC
+    let ioc: any = null;
+    const iocLookupValues = [alert.ipAddress, alert.domain, alert.fileHash].filter(Boolean) as string[];
+    if (iocLookupValues.length > 0) {
+      ioc = await this.prisma.iOC.findFirst({
+        where: {
+          organizationId: this.organizationId,
+          value: { in: iocLookupValues },
+        },
+      });
+    }
+
+    return {
+      ...alert,
+      detectionRule,
+      detectionReason,
+      matchedConditions,
+      contributingEvents,
+      ioc,
+    };
   }
 
   async update(id: string, data: any) {
@@ -94,7 +148,6 @@ export class AlertsService extends TenantScopedRepository {
     const updateData: Prisma.AlertUpdateInput = {};
     if (data.status !== undefined) {
       updateData.status = data.status as AlertStatus;
-      // Adjust activeAlertCount on assets if changing status
       if (alert.assetId) {
         if (alert.status !== AlertStatus.RESOLVED && data.status === AlertStatus.RESOLVED) {
           await this.prisma.asset.update({
@@ -112,10 +165,17 @@ export class AlertsService extends TenantScopedRepository {
     if (data.assignedAnalystId !== undefined) {
       updateData.assignedAnalystId = data.assignedAnalystId;
       if (data.assignedAnalystId) {
-        const analyst = await this.prisma.user.findUnique({
-          where: { id: data.assignedAnalystId },
+        // Scope analyst resolution to org membership — prevents cross-tenant name leakage
+        const membership = await this.prisma.organizationMember.findUnique({
+          where: {
+            organizationId_userId: {
+              organizationId: this.organizationId,
+              userId: data.assignedAnalystId,
+            },
+          },
+          include: { user: { select: { fullName: true } } },
         });
-        updateData.assignedAnalystName = analyst?.fullName || null;
+        updateData.assignedAnalystName = membership?.user?.fullName ?? null;
       } else {
         updateData.assignedAnalystName = null;
       }
@@ -139,7 +199,6 @@ export class AlertsService extends TenantScopedRepository {
       throw new NotFoundException(`Alert with ID ${alertId} not found`);
     }
 
-    // Create incident using details from the alert
     const incident = await this.prisma.incident.create({
       data: {
         organizationId: this.organizationId,
@@ -152,12 +211,11 @@ export class AlertsService extends TenantScopedRepository {
         assignedAnalystId: userId,
         assignedAnalystName: fullName,
         detectionTime: alert.timestamp,
-        slaDeadline: new Date(Date.now() + 4 * 60 * 60 * 1000), // 4 hours from now
+        slaDeadline: new Date(Date.now() + 4 * 60 * 60 * 1000),
         tags: ['Escalated'] as any,
       },
     });
 
-    // Link the alert to the incident
     await this.prisma.alert.update({
       where: { id: alertId },
       data: {
@@ -166,12 +224,11 @@ export class AlertsService extends TenantScopedRepository {
       },
     });
 
-    // Log the audit record
     await this.prisma.auditLog.create({
       data: {
         organizationId: this.organizationId,
         actorId: userId,
-        actorEmail: this.request.user?.email || '',
+        actorEmail: this.request.user?.email || 'analyst@threatsync.local',
         action: 'ALERT_ESCALATION',
         resourceType: 'ALERT',
         resourceId: alertId,

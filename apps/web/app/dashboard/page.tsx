@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import type { Alert, Asset, Incident } from 'shared-types';
 import {
   Activity,
@@ -11,7 +12,10 @@ import {
   ShieldCheck,
   TimerReset,
 } from 'lucide-react';
+import { ErrorView, LoadingSpinner } from '@/components/StateViews';
 import { apiRequest, getActiveMembership } from '@/lib/api-client';
+
+
 import {
   Bar,
   BarChart,
@@ -162,6 +166,11 @@ export default function SecurityOverviewDashboard() {
     return `${alertText} ${incidentText} ${assetText}`;
   }, [alerts, incidents, assets, overviewStats]);
 
+  if (loading) {
+
+    return <LoadingSpinner label="Loading ThreatSync OS Overview Data..." />;
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -179,11 +188,7 @@ export default function SecurityOverviewDashboard() {
         </button>
       </div>
 
-      {error && (
-        <div className="rounded border border-rose-500/30 bg-rose-500/5 p-4 text-sm text-rose-300">
-          {error}
-        </div>
-      )}
+      {error && <ErrorView error={error} onRetry={fetchDashboardData} />}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -304,10 +309,10 @@ export default function SecurityOverviewDashboard() {
           <div className="mt-4 space-y-3">
             {topAssets.length > 0 ? (
               topAssets.map((asset) => (
-                <div key={asset.id} className="rounded border border-slate-800 bg-slate-950/40 p-3">
+                <Link key={asset.id} href={`/dashboard/assets/${asset.id}`} className="block rounded border border-slate-800 bg-slate-950/40 p-3 hover:border-cyan-500/50 transition-colors">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-xs font-semibold text-white">{asset.displayName || asset.hostname}</div>
+                      <div className="text-xs font-semibold text-white hover:text-cyan-400">{asset.displayName || asset.hostname}</div>
                       <div className="mt-1 font-mono text-[10px] text-slate-400">{asset.hostname}</div>
                     </div>
                     <div className="text-right">
@@ -326,7 +331,7 @@ export default function SecurityOverviewDashboard() {
                       style={{ width: `${Math.min(Number(asset.riskScore || 0), 100)}%` }}
                     />
                   </div>
-                </div>
+                </Link>
               ))
             ) : (
               <EmptyState title="No assets currently available" description="No asset inventory data could be loaded for this tenant." />
@@ -346,14 +351,14 @@ export default function SecurityOverviewDashboard() {
           <div className="mt-4 space-y-3">
             {topAlerts.length > 0 ? (
               topAlerts.map((alert) => (
-                <div key={alert.id} className="rounded border border-slate-800 bg-slate-950/40 p-3 transition hover:border-slate-700">
+                <Link key={alert.id} href={`/dashboard/alerts/${alert.id}`} className="block rounded border border-slate-800 bg-slate-950/40 p-3 transition hover:border-cyan-500/50">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <SeverityBadge severity={alert.severity} />
                         <span className="font-mono text-[10px] text-slate-400">{alert.source}</span>
                       </div>
-                      <div className="mt-2 text-sm font-semibold text-white">{alert.title}</div>
+                      <div className="mt-2 text-sm font-semibold text-white hover:text-cyan-300">{alert.title}</div>
                     </div>
                     <div className="whitespace-nowrap font-mono text-[10px] text-slate-500">
                       {new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -365,7 +370,7 @@ export default function SecurityOverviewDashboard() {
                     <span className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5">{alert.category}</span>
                     <span>{alert.confidenceScore || 0}% confidence</span>
                   </div>
-                </div>
+                </Link>
               ))
             ) : (
               <EmptyState
@@ -386,10 +391,10 @@ export default function SecurityOverviewDashboard() {
           <div className="mt-4 space-y-3">
             {openingIncidents.length > 0 ? (
               openingIncidents.map((incident) => (
-                <div key={incident.id} className="rounded border border-slate-800 bg-slate-950/40 p-3">
+                <Link key={incident.id} href={`/dashboard/incidents/${incident.id}`} className="block rounded border border-slate-800 bg-slate-950/40 p-3 hover:border-cyan-500/50 transition-colors">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-xs font-semibold text-white">{incident.title}</div>
+                      <div className="text-xs font-semibold text-white hover:text-cyan-300">{incident.title}</div>
                       <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-500">{incident.incidentType}</div>
                     </div>
                     <StatusBadge status={incident.status} />
@@ -400,7 +405,7 @@ export default function SecurityOverviewDashboard() {
                     <span>{incident.assignedAnalystName || 'Unassigned'}</span>
                     <span className="font-mono">{new Date(incident.detectionTime).toLocaleDateString()}</span>
                   </div>
-                </div>
+                </Link>
               ))
             ) : (
               <EmptyState
@@ -411,33 +416,7 @@ export default function SecurityOverviewDashboard() {
           </div>
         </div>
       </div>
-
-      <div className="premium-card rounded-xl border border-slate-800/80 p-5">
-        <PanelHeader
-          eyebrow="Response context"
-          title="Prepared actions"
-          action={
-            <div className="inline-flex items-center gap-2 rounded border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
-              <ArrowUpRight className="h-3.5 w-3.5" /> Ready for review
-            </div>
-          }
-        />
-
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div className="rounded border border-slate-800 bg-slate-950/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Focused on</div>
-            <div className="mt-2 text-sm font-semibold text-white">{overviewStats.criticalHigh} elevated alerts</div>
-          </div>
-          <div className="rounded border border-slate-800 bg-slate-950/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Response posture</div>
-            <div className="mt-2 text-sm font-semibold text-white">{overviewStats.openIncidents} active investigations</div>
-          </div>
-          <div className="rounded border border-slate-800 bg-slate-950/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Monitoring coverage</div>
-            <div className="mt-2 text-sm font-semibold text-white">{overviewStats.monitoredAssets} assets tracked</div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
+

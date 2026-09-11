@@ -244,7 +244,7 @@ This document is the authoritative inventory of the application API contracts cu
 ### GET /alerts/:alertId
 - Auth required: Yes
 - Tenant scope: Yes
-- Success response: single alert with asset and linked incident summary
+- Success response: alert investigation detail with detectionRule, detectionReason, matchedConditions, contributingEvents, ioc, asset, and incident.
 
 ### PATCH /alerts/:alertId
 - Auth required: Yes
@@ -283,7 +283,12 @@ This document is the authoritative inventory of the application API contracts cu
 ### GET /incidents/:incidentId
 - Auth required: Yes
 - Tenant scope: Yes
-- Success response: incident with alerts, tasks, comments, evidence
+- Success response: full incident investigation detail with `alerts`, `tasks`, `comments`, `evidence`, `triggeringEvents`, `affectedAssets`, `users`, `iocs`, `vulnerabilities`, `auditHistory`, and `timeline`.
+
+### GET /incidents/:incidentId/timeline
+- Auth required: Yes
+- Tenant scope: Yes
+- Success response: array of deterministic `TimelineItem` objects ordered chronologically.
 
 ### POST /incidents
 - Auth required: Yes
@@ -297,8 +302,7 @@ This document is the authoritative inventory of the application API contracts cu
     "priority": "HIGH",
     "incidentType": "POLICY_VIOLATION",
     "assignedAnalystId": "user_456",
-    "tags": ["identity"],
-    "rootCause": "n/a"
+    "tags": ["identity"]
   }
   ```
 - Success response: created incident
@@ -306,102 +310,53 @@ This document is the authoritative inventory of the application API contracts cu
 ### PATCH /incidents/:incidentId
 - Auth required: Yes
 - Tenant scope: Yes
-- Request body: partial incident update
+- Lifecycle validation:
+  - Enforces allowed status transitions (`OPEN` -> `TRIAGED`/`INVESTIGATING`/`CLOSED`; `TRIAGED` -> `INVESTIGATING`/`CONTAINMENT_IN_PROGRESS`/`CLOSED`; `INVESTIGATING` -> `CONTAINMENT_IN_PROGRESS`/`CONTAINED`/`REMEDIATION_IN_PROGRESS`/`RESOLVED`/`CLOSED`, etc.).
+  - Returns `400 BAD_REQUEST` for invalid state transitions.
+  - Idempotent: when `status` is unchanged, returns current incident without generating duplicate transition audit records.
+  - Generates audit log for valid state changes (`INCIDENT_STATUS_TRANSITION`).
 
-### POST /incidents/:incidentId/comments
-- Auth required: Yes
-- Tenant scope: Yes
-- Body:
-  ```json
-  {
-    "content": "Initial triage note",
-    "isInternalOnly": false
-  }
-  ```
+## Events
 
-### POST /incidents/:incidentId/tasks
-- Auth required: Yes
-- Tenant scope: Yes
-- Body: task payload
-
-### PATCH /incidents/:incidentId/tasks/:taskId
-- Auth required: Yes
-- Tenant scope: Yes
-- Body: partial task update
-
-### POST /incidents/:incidentId/evidence
-- Auth required: Yes
-- Tenant scope: Yes
-- Body: evidence payload
-
-## Vulnerabilities
-
-### GET /vulnerabilities
-- Auth required: Yes
-- Tenant scope: Yes
-- Success response: vulnerability catalog array
-
-### GET /asset-vulnerabilities
+### GET /events
 - Auth required: Yes
 - Tenant scope: Yes
 - Query params:
+  - `startTime?: string`
+  - `endTime?: string`
+  - `eventType?: string`
+  - `severity?: AlertSeverity`
+  - `source?: string`
   - `assetId?: string`
-- Success response: array of asset vulnerability mappings
+  - `userIdentity?: string`
+  - `ipAddress?: string`
+  - `domain?: string`
+  - `ioc?: string`
+  - `page?: number` (default 1)
+  - `pageSize?: number` (default 20, max 100)
+- Success response:
+  ```json
+  {
+    "data": [ ... ],
+    "meta": {
+      "page": 1,
+      "pageSize": 20,
+      "total": 120,
+      "totalPages": 6
+    }
+  }
+  ```
 
-### PATCH /asset-vulnerabilities/:id
+### GET /events/:id
 - Auth required: Yes
 - Tenant scope: Yes
-- Request body: partial vulnerability status update
-
-## Events
+- Success response: single security event record
 
 ### POST /events/ingest
 - Auth required: Yes
 - Tenant scope: Yes
-- Request body:
-  ```json
-  {
-    "eventType": "OKTA_AUTH_AUDIT",
-    "source": "OktaIDP",
-    "action": "PROCESS_AUDIT",
-    "outcome": "FAILURE",
-    "severity": "MEDIUM",
-    "message": "Failed login password challenge for administrator",
-    "hostname": "dc-01",
-    "metadata": {
-      "attemptCount": 8
-    },
-    "rawEvent": {
-      "eventType": "OKTA_AUTH_AUDIT"
-    }
-  }
-  ```
-- Success response:
-  ```json
-  {
-    "normalizedEvent": { ... },
-    "storedEvent": { ... },
-    "alertsCreated": [ ... ],
-    "deduplicated": false
-  }
-  ```
-- Duplicate response:
-  ```json
-  {
-    "normalizedEvent": { ... },
-    "storedEvent": { ... },
-    "alertsCreated": [],
-    "deduplicated": true
-  }
-  ```
-- Duplicate behavior:
-  - Performs recent duplicate detection for same tenant, event type, source, action, outcome, and message within a 5 minute window.
-- Side effects:
-  - Creates security event
-  - Runs detection rules
-  - Creates alerts when rules match
-  - Recalculates asset risk
-  - Writes audit logs
+- Request body: ingestion payload
+- Success response: `{ normalizedEvent, storedEvent, alertsCreated, deduplicated }`
 
 ## Intelligence
 
@@ -410,37 +365,16 @@ This document is the authoritative inventory of the application API contracts cu
 - Tenant scope: Yes
 - Success response: array of persisted IOC records
 
+### GET /intelligence/iocs/:id
+- Auth required: Yes
+- Tenant scope: Yes
+- Success response: IOC investigation footprint including `observations`, `alerts`, `incidents`, `affectedAssets`, `enrichments`, `intelligenceResult`, and `timeline`.
+
 ### POST /intelligence/investigate
 - Auth required: Yes
 - Tenant scope: Yes
-- Request body:
-  ```json
-  {
-    "value": "8.8.8.8",
-    "type": "IPV4"
-  }
-  ```
-- Success response:
-  ```json
-  {
-    "organizationId": "org_123",
-    "value": "8.8.8.8",
-    "type": "IPV4",
-    "local": {
-      "found": true,
-      "iocs": [ ... ],
-      "confidence": 87,
-      "reputationScore": 83,
-      "source": "local",
-      "message": "Local IOC matches found"
-    },
-    "external": {
-      "provider": "external",
-      "status": "UNAVAILABLE",
-      "message": "Provider is not configured"
-    }
-  }
-  ```
+- Request body: `{ "value": "8.8.8.8", "type": "IPV4" }`
+- Success response: local & external threat intelligence findings
 
 ## Audit
 

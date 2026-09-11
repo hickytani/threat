@@ -1,4 +1,14 @@
-import type { AuthSession, OrganizationMembership } from 'shared-types';
+import type {
+  AuthSession,
+  OrganizationMembership,
+  IncidentInvestigationDetail,
+  AlertInvestigationDetail,
+  IocInvestigationDetail,
+  AssetInvestigationDetail,
+  PaginatedResponse,
+  SecurityEvent,
+  TimelineItem,
+} from 'shared-types';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
@@ -93,3 +103,90 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
 
   return data as T;
 }
+
+// Investigation API Client Layer
+function buildQueryString(params: Record<string, any> = {}): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      query.append(key, String(value));
+    }
+  }
+  const str = query.toString();
+  return str ? `?${str}` : '';
+}
+
+export async function getIncidents(params: Record<string, any> = {}) {
+  return apiRequest<any[]>(`/incidents${buildQueryString(params)}`);
+}
+
+export async function getIncidentInvestigation(incidentId: string): Promise<IncidentInvestigationDetail> {
+  return apiRequest<IncidentInvestigationDetail>(`/incidents/${incidentId}`);
+}
+
+export async function getIncidentTimeline(incidentId: string): Promise<TimelineItem[]> {
+  return apiRequest<TimelineItem[]>(`/incidents/${incidentId}/timeline`);
+}
+
+export async function updateIncidentStatus(incidentId: string, status: string) {
+  return apiRequest<any>(`/incidents/${incidentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function addIncidentComment(incidentId: string, content: string) {
+  return apiRequest<any>(`/incidents/${incidentId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function getAlerts(params: Record<string, any> = {}) {
+  return apiRequest<any[]>(`/alerts${buildQueryString(params)}`);
+}
+
+export async function getAlertInvestigation(alertId: string): Promise<AlertInvestigationDetail> {
+  return apiRequest<AlertInvestigationDetail>(`/alerts/${alertId}`);
+}
+
+export async function searchEvents(params: Record<string, any> = {}): Promise<PaginatedResponse<SecurityEvent>> {
+  return apiRequest<PaginatedResponse<SecurityEvent>>(`/events${buildQueryString(params)}`);
+}
+
+export async function getIocs(params: Record<string, any> = {}) {
+  return apiRequest<any[]>(`/intelligence/iocs${buildQueryString(params)}`);
+}
+
+export async function getIocInvestigation(iocId: string): Promise<IocInvestigationDetail> {
+  return apiRequest<IocInvestigationDetail>(`/intelligence/iocs/${iocId}`);
+}
+
+export async function getAssets(params: Record<string, any> = {}) {
+  return apiRequest<any[]>(`/assets${buildQueryString(params)}`);
+}
+
+export async function getAssetInvestigation(assetId: string): Promise<AssetInvestigationDetail> {
+  return apiRequest<AssetInvestigationDetail>(`/assets/${assetId}`);
+}
+
+export async function getAssetTimeline(assetId: string): Promise<TimelineItem[]> {
+  return apiRequest<TimelineItem[]>(`/assets/${assetId}/timeline`);
+}
+
+export async function getVulnerabilities() {
+  return apiRequest<any[]>('/vulnerabilities');
+}
+
+export async function getAuditLogs(params: Record<string, any> = {}) {
+  return apiRequest<any[]>(`/audit${buildQueryString(params)}`);
+}
+
+export async function getSystemHealth() {
+  return apiRequest<{
+    status: string;
+    dependencies?: Record<string, string>;
+    timestamp: string;
+  }>('/health/dependencies');
+}
+

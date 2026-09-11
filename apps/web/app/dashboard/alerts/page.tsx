@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+
 import { 
   AlertTriangle, 
   Search, 
@@ -290,51 +292,42 @@ export default function AlertsLedger() {
             {/* Actions Panel */}
             <div className="space-y-3">
               <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Triage Decisions</div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleUpdateStatus(selectedAlert.id, 'INVESTIGATING')}
-                  className="flex-1 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 font-semibold py-1.5 rounded text-[11px] transition-colors"
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/dashboard/alerts/${selectedAlert.id}`}
+                  className="flex-1 bg-cyan-950/40 border border-cyan-800 text-cyan-300 hover:bg-cyan-900/60 font-semibold py-1.5 px-2 rounded text-[11px] text-center transition-colors flex items-center justify-center gap-1"
                 >
-                  Investigate
-                </button>
+                  Full Investigation Console <ArrowUpRight className="h-3 w-3" />
+                </Link>
                 <button
                   onClick={() => handleUpdateStatus(selectedAlert.id, 'RESOLVED')}
-                  className="flex-1 bg-slate-900 border border-slate-800 hover:border-emerald-700 text-emerald-400 font-semibold py-1.5 rounded text-[11px] transition-colors"
+                  className="bg-slate-900 border border-slate-800 hover:border-emerald-700 text-emerald-400 font-semibold py-1.5 px-3 rounded text-[11px] transition-colors"
                 >
-                  Mark Resolved
+                  Resolve
                 </button>
                 <button
                   onClick={() => handleEscalate(selectedAlert.id)}
-                  className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold py-1.5 rounded text-[11px] transition-colors flex items-center justify-center gap-0.5 shadow-md shadow-cyan-500/10"
+                  className="bg-purple-950/40 border border-purple-800 text-purple-300 font-bold py-1.5 px-3 rounded text-[11px] transition-colors flex items-center justify-center gap-0.5"
                 >
-                  Escalate <ArrowUpRight className="h-3 w-3" />
+                  Escalate
                 </button>
               </div>
             </div>
 
-            {/* AI Investigation Section */}
+
+            {/* Real Detection Evidence Section */}
             <div className="space-y-3 border-t border-slate-900 pt-5">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">AI Diagnostics Copilot</span>
-                <button
-                  onClick={() => requestAIPlaybook(selectedAlert)}
-                  disabled={aiLoading}
-                  className="text-[10px] font-bold text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1"
-                >
-                  <Brain className="h-3 w-3" /> {aiLoading ? 'Analyzing...' : 'Generate Playbook'}
-                </button>
+              <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                <FileCode className="h-3.5 w-3.5 text-cyan-400" /> Detection Reason & Rule Details
               </div>
-
-              {aiAnalysis ? (
-                <div className="p-4 bg-cyan-950/10 border border-cyan-800/10 rounded font-mono text-[10px] text-slate-300 space-y-2 whitespace-pre-line leading-relaxed">
-                  {aiAnalysis}
-                </div>
-              ) : (
-                <div className="p-4 bg-slate-950/30 rounded border border-slate-900 text-center py-6 text-xs text-slate-500">
-                  Click 'Generate Playbook' to compile forensic advice.
-                </div>
-              )}
+              <div className="p-3 bg-slate-950/60 border border-slate-900 rounded font-mono text-[10px] text-slate-300 space-y-2 leading-relaxed">
+                <div>Rule ID: <span className="text-cyan-400 font-semibold">{selectedAlert.detectionRuleId || 'SYSTEM_RULE'}</span></div>
+                <div>Category: <span className="text-white font-semibold">{selectedAlert.category}</span></div>
+                <div>Source: <span className="text-white font-semibold">{selectedAlert.source}</span></div>
+                <div>Confidence Score: <span className="text-emerald-400 font-bold">{selectedAlert.confidenceScore || 90}%</span></div>
+              </div>
             </div>
+
 
             {/* Raw JSON Event Payload */}
             <div className="space-y-3 border-t border-slate-900 pt-5">

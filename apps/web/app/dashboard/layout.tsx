@@ -36,6 +36,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [organization, setOrganization] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [healthStatus, setHealthStatus] = useState<string>('checking...');
+
   useEffect(() => {
     const session = getStoredSession();
 
@@ -46,6 +48,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     setUser(session.user);
     setOrganization(session.memberships[0]);
+
+    // Check backend health
+    apiRequest<{ status: string }>('/health/dependencies')
+      .then((res) => setHealthStatus(res.status))
+      .catch(() => setHealthStatus('unavailable'));
   }, [router]);
 
   const handleLogout = async () => {
@@ -61,7 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const navItems = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Threat Canvas', href: '/dashboard/explorer', icon: Workflow },
+    { name: 'Event Explorer', href: '/dashboard/explorer', icon: Workflow },
     { name: 'Alerts', href: '/dashboard/alerts', icon: AlertTriangle },
     { name: 'Incidents', href: '/dashboard/incidents', icon: Terminal },
     { name: 'Asset Registry', href: '/dashboard/assets', icon: Layers },
@@ -174,10 +181,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span className="text-[10px] text-slate-500 font-bold uppercase">ACTIVE TENANT</span>
               <span className="text-xs font-semibold text-cyan-400">{organization.organizationName}</span>
             </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-400 font-mono">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> WebSocket: Live Connected
+            <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono">
+              <span className={`h-2 w-2 rounded-full ${healthStatus === 'healthy' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              <span className="text-slate-400">SOC ENGINE:</span>
+              <span className={healthStatus === 'healthy' ? 'text-emerald-400' : 'text-amber-400 font-bold'}>
+                {healthStatus.toUpperCase()}
+              </span>
             </div>
           </div>
+
 
           {/* Quick Actions Search Header */}
           <div className="flex items-center gap-4">

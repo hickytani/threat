@@ -2,8 +2,8 @@ import './globals.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'ThreatSync OS — Defensive Cyber Security Operations Platform',
-  description: 'Detect faster. Investigate smarter. Respond confidently. Centralize security alerts, asset visibility, and vulnerability intelligence in one unified SOC dashboard.',
+  title: 'ThreatSync OS — Security Operations & Investigation Platform',
+  description: 'Full-stack SOC platform for security event ingestion, deterministic detection, alert correlation, explainable risk scoring, incident investigation, and auditable response.',
 };
 
 export default function RootLayout({

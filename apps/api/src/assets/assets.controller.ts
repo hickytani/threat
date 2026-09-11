@@ -2,8 +2,6 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Ht
 import { AssetsService } from './assets.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
-import { CurrentMember } from '../auth/current-member.decorator.js';
-import { ActiveMember } from '../auth/auth.interface.js';
 
 @Controller('assets')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -25,6 +23,14 @@ export class AssetsController {
     @Param('assetId') assetId: string,
   ) {
     return this.assetsService.findOne(assetId);
+  }
+
+  @Get(':assetId/timeline')
+  @HttpCode(HttpStatus.OK)
+  async getTimeline(
+    @Param('assetId') assetId: string,
+  ) {
+    return this.assetsService.getTimeline(assetId);
   }
 
   @Post()

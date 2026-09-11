@@ -1,9 +1,7 @@
-import { Controller, Get, Post, Body, UseGuards, HttpStatus, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, HttpStatus, HttpCode } from '@nestjs/common';
 import { IntelligenceService } from './intelligence.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
-import { CurrentMember } from '../auth/current-member.decorator.js';
-import type { ActiveMember } from '../auth/auth.interface.js';
 
 @Controller('intelligence')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -14,6 +12,12 @@ export class IntelligenceController {
   @HttpCode(HttpStatus.OK)
   async getIocs() {
     return this.intelService.getIocs();
+  }
+
+  @Get('iocs/:id')
+  @HttpCode(HttpStatus.OK)
+  async getIocDetail(@Param('id') id: string) {
+    return this.intelService.getIocDetail(id);
   }
 
   @Post('investigate')

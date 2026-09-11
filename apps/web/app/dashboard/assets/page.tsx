@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Layers, Search, Server, Monitor, ShieldAlert, AlertCircle, Database, Network } from 'lucide-react';
+
 import type { Asset } from 'shared-types';
 import { apiRequest, getActiveMembership } from '@/lib/api-client';
 
@@ -98,17 +100,22 @@ export default function AssetsRegistry() {
         </div>
       ) : (
         <div className="grid md:grid-cols-3 gap-4">
+
           {assets.map((asset) => {
             const isServer = asset.type === 'SERVER' || asset.type === 'DATABASE';
             return (
-              <div key={asset.id} className="premium-card p-5 rounded-lg border border-slate-900 space-y-4">
+              <Link
+                key={asset.id}
+                href={`/dashboard/assets/${asset.id}`}
+                className="premium-card p-5 rounded-lg border border-slate-900 space-y-4 hover:border-cyan-500/50 transition-colors block"
+              >
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-2">
                     <div className="h-8 w-8 rounded bg-slate-950 border border-slate-900 flex items-center justify-center text-cyan-400">
                       {isServer ? <Server className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
                     </div>
                     <div>
-                      <h4 className="font-bold text-xs text-white truncate max-w-[120px]">{asset.displayName}</h4>
+                      <h4 className="font-bold text-xs text-white truncate max-w-[120px] hover:text-cyan-300">{asset.displayName}</h4>
                       <span className="text-[10px] text-slate-500 font-mono block mt-0.5">{asset.hostname}</span>
                     </div>
                   </div>
@@ -137,10 +144,11 @@ export default function AssetsRegistry() {
                     <span>{asset.vulnerabilityCount || 0} CVEs</span>
                   </div>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
+
       )}
 
     </div>

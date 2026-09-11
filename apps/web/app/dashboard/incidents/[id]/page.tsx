@@ -1,522 +1,396 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { apiRequest, getActiveMembership } from '@/lib/api-client';
-import { 
-  Terminal, 
-  Clock, 
-  CheckSquare, 
-  MessageSquare, 
-  Paperclip, 
-  BrainCircuit, 
+import Link from 'next/link';
+import type { IncidentInvestigationDetail } from 'shared-types';
+import { getIncidentInvestigation, updateIncidentStatus, addIncidentComment } from '@/lib/api-client';
+import { LoadingSpinner, ErrorView, SeverityBadge } from '@/components/StateViews';
+import { InvestigationTimeline } from '@/components/InvestigationTimeline';
+import {
+  Terminal,
   ArrowLeft,
-  Loader2,
-  AlertTriangle,
+  Clock,
   User,
-  Plus,
-  Play,
-  FileCode,
-  ShieldCheck
+  Shield,
+  AlertTriangle,
+  Server,
+  Activity,
+  MessageSquare,
+  FileSpreadsheet,
+  ExternalLink,
+  CheckCircle2,
+  Send,
+  Lock,
 } from 'lucide-react';
 
-export default function IncidentCommandCenter() {
+export default function IncidentInvestigationConsole() {
   const params = useParams();
   const router = useRouter();
-  const incidentId = params.id as string;
+  const incidentId = params?.id as string;
 
+  const [detail, setDetail] = useState<IncidentInvestigationDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [incident, setIncident] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState('overview');
-
-  // Input states
+  const [error, setError] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'timeline' | 'evidence' | 'risk' | 'response'>('timeline');
   const [newComment, setNewComment] = useState('');
-  const [isInternalComment, setIsInternalComment] = useState(true);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  
-  // Post-Incident Review Fields
-  const [rootCause, setRootCause] = useState('');
-  const [resolution, setResolution] = useState('');
-  const [updatingPir, setUpdatingPir] = useState(false);
-
-  // AI advisory
-  const [aiReport, setAiReport] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   useEffect(() => {
-    fetchIncidentDetails();
+    if (!incidentId) return;
+    loadIncident();
   }, [incidentId]);
 
-  const fetchIncidentDetails = async () => {
+  const loadIncident = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const membership = getActiveMembership();
-      if (!membership) {
-        setIncident(null);
-        return;
-      }
-
-      const data = await apiRequest<any>(`/incidents/${incidentId}`);
-      setIncident(data);
-      setRootCause(data.rootCause || '');
-      setResolution(data.resolution || '');
-    } catch (err) {
-      console.error(err);
-      setIncident(null);
+      const data = await getIncidentInvestigation(incidentId);
+      setDetail(data);
+    } catch (err: any) {
+      console.error('Failed to load incident investigation details:', err);
+      setError(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdateStatus = async (newStatus: string) => {
+  const handleStatusTransition = async (newStatus: string) => {
+    if (!detail) return;
+    setUpdatingStatus(true);
     try {
-      const membership = getActiveMembership();
-      if (!membership) {
-        return;
-      }
-
-      await apiRequest<any>(`/incidents/${incidentId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus })
-      });
-      fetchIncidentDetails();
-    } catch (err) {
-      console.error(err);
+      await updateIncidentStatus(detail.id, newStatus);
+      await loadIncident();
+    } catch (err: any) {
+      alert(`Status transition failed: ${err.message}`);
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
-
+    if (!newComment.trim() || !detail) return;
+    setSubmittingComment(true);
     try {
-      const membership = getActiveMembership();
-      if (!membership) {
-        return;
-      }
-
-      await apiRequest<any>(`/incidents/${incidentId}/comments`, {
-        method: 'POST',
-        body: JSON.stringify({
-          content: newComment,
-          isInternalOnly: isInternalComment
-        })
-      });
-
+      await addIncidentComment(detail.id, newComment.trim());
       setNewComment('');
-      fetchIncidentDetails();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleAddTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-
-    try {
-      const membership = getActiveMembership();
-      if (!membership) {
-        return;
-      }
-
-      await apiRequest<any>(`/incidents/${incidentId}/tasks`, {
-        method: 'POST',
-        body: JSON.stringify({
-          title: newTaskTitle,
-          priority: 'MEDIUM'
-        })
-      });
-
-      setNewTaskTitle('');
-      fetchIncidentDetails();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleToggleTask = async (taskId: string, currentStatus: string) => {
-    const nextStatus = currentStatus === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
-    try {
-      const membership = getActiveMembership();
-      if (!membership) {
-        return;
-      }
-
-      await apiRequest<any>(`/incidents/${incidentId}/tasks/${taskId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: nextStatus })
-      });
-      fetchIncidentDetails();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleSavePir = async () => {
-    setUpdatingPir(true);
-    try {
-      const membership = getActiveMembership();
-      if (!membership) {
-        return;
-      }
-
-      await apiRequest<any>(`/incidents/${incidentId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ rootCause, resolution })
-      });
-      alert('Incident review details saved successfully!');
-      fetchIncidentDetails();
-    } catch (err) {
-      console.error(err);
+      await loadIncident();
+    } catch (err: any) {
+      alert(`Posting comment failed: ${err.message}`);
     } finally {
-      setUpdatingPir(false);
+      setSubmittingComment(false);
     }
   };
 
-  const handleTriggerAI = () => {
-    setAiLoading(false);
-    setAiReport(
-      'AI-assisted diagnostics are not configured for this deployment. This incident workflow currently relies on deterministic backend state, audit records, and analyst review.'
-    );
+  if (loading) return <LoadingSpinner label="Compiling incident investigation matrix..." />;
+  if (error) return <div className="p-6"><ErrorView error={error} onRetry={loadIncident} /></div>;
+  if (!detail) return null;
+
+  const allowedNextStatuses: Record<string, string[]> = {
+    OPEN: ['TRIAGED', 'INVESTIGATING', 'CLOSED'],
+    TRIAGED: ['INVESTIGATING', 'CONTAINMENT_IN_PROGRESS', 'CLOSED'],
+    INVESTIGATING: ['CONTAINMENT_IN_PROGRESS', 'CONTAINED', 'CLOSED'],
+    CONTAINMENT_IN_PROGRESS: ['CONTAINED', 'REMEDIATION_IN_PROGRESS', 'CLOSED'],
+    CONTAINED: ['REMEDIATION_IN_PROGRESS', 'MONITORING', 'RESOLVED', 'CLOSED'],
+    REMEDIATION_IN_PROGRESS: ['MONITORING', 'RESOLVED', 'CLOSED'],
+    MONITORING: ['RESOLVED', 'CLOSED'],
+    RESOLVED: ['CLOSED'],
+    CLOSED: [],
   };
 
-  const handleUploadEvidence = async () => {
-    try {
-      const membership = getActiveMembership();
-      if (!membership) {
-        return;
-      }
-
-      await apiRequest<any>(`/incidents/${incidentId}/evidence`, {
-        method: 'POST',
-        body: JSON.stringify({
-          fileName: 'firewall_block_audit_log.txt',
-          fileSize: 1024,
-          mimeType: 'text/plain'
-        })
-      });
-
-      alert('Evidence placeholder logged through the backend incident workflow.');
-      fetchIncidentDetails();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center text-slate-500 font-mono">
-        <Loader2 className="h-6 w-6 animate-spin text-cyan-400 mr-2" /> Loading Incident Command Center...
-      </div>
-    );
-  }
-
-  if (!incident) {
-    return (
-      <div className="p-6 text-center text-slate-400">
-        <AlertTriangle className="h-10 w-10 text-rose-400 mx-auto mb-2" /> Incident ticket not found or deleted.
-      </div>
-    );
-  }
+  const nextStatuses = allowedNextStatuses[detail.status] || [];
 
   return (
-    <div className="p-6 space-y-6">
-      
-      {/* Back link */}
-      <div>
-        <button 
-          onClick={() => router.push('/dashboard/incidents')}
-          className="text-xs font-semibold text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header Navigation */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-slate-900 pb-4">
+        <div>
+          <button
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white mb-2 transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Incidents
+          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <SeverityBadge severity={detail.severity} />
+            <span className="text-xs font-mono px-2 py-0.5 rounded bg-cyan-950 border border-cyan-800 text-cyan-400 font-bold">
+              STATUS: {detail.status}
+            </span>
+            <span className="text-xs font-mono text-slate-500">TYPE: {detail.incidentType}</span>
+            <span className="text-xs font-mono text-slate-500">ID: {detail.id}</span>
+          </div>
+          <h1 className="text-xl font-bold tracking-tight text-white mt-2">{detail.title}</h1>
+        </div>
+
+        {/* Assigned Analyst & SLA */}
+        <div className="flex flex-col text-right font-mono text-xs space-y-1">
+          <div className="text-slate-400">
+            Assigned Analyst: <span className="text-white font-bold">{detail.assignedAnalystName || 'Unassigned'}</span>
+          </div>
+          <div className="text-slate-500 text-[11px]">
+            Detection Time: {new Date(detail.detectionTime).toLocaleString()}
+          </div>
+          {detail.slaDeadline && (
+            <div className="text-amber-400 text-[10px]">
+              SLA Deadline: {new Date(detail.slaDeadline).toLocaleString()}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Summary Banner */}
+      <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 leading-relaxed text-xs text-slate-300">
+        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Executive Summary</div>
+        {detail.summary}
+      </div>
+
+      {/* Console Tab Navigation */}
+      <div className="flex border-b border-slate-900 gap-2">
+        <button
+          onClick={() => setActiveTab('timeline')}
+          className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+            activeTab === 'timeline'
+              ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
         >
-          <ArrowLeft className="h-4 w-4" /> Back to logs list
+          Timeline & Footprint ({detail.timeline?.length || 0})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('evidence')}
+          className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+            activeTab === 'evidence'
+              ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          Detection Evidence ({detail.alerts?.length || 0} Alerts, {detail.triggeringEvents?.length || 0} Events)
+        </button>
+
+        <button
+          onClick={() => setActiveTab('risk')}
+          className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+            activeTab === 'risk'
+              ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          Assets & Vulnerabilities ({detail.affectedAssets?.length || 0})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('response')}
+          className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+            activeTab === 'response'
+              ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          Response Controls & Audit
         </button>
       </div>
 
-      {/* Incident Header */}
-      <div className="premium-card p-5 rounded-lg border border-slate-900 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-[3px] text-[9px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-              {incident.severity}
-            </span>
-            <span className="text-[10px] text-slate-500 font-mono uppercase">{incident.incidentType}</span>
-          </div>
-          <h2 className="text-lg font-bold text-white leading-tight">{incident.title}</h2>
-          <p className="text-xs text-slate-400">{incident.summary}</p>
+      {/* TAB 1: TIMELINE */}
+      {activeTab === 'timeline' && (
+        <div className="py-2">
+          <InvestigationTimeline items={detail.timeline || []} />
         </div>
+      )}
 
-        <div className="flex items-center gap-3">
-          <select
-            value={incident.status}
-            onChange={(e) => handleUpdateStatus(e.target.value)}
-            className="rounded border border-slate-800 bg-slate-950 text-xs text-white px-3 py-1.5 focus:outline-none"
-          >
-            <option value="OPEN">Open</option>
-            <option value="INVESTIGATING">Investigating</option>
-            <option value="CONTAINMENT_IN_PROGRESS">Containment In Progress</option>
-            <option value="RESOLVED">Resolved</option>
-          </select>
-          <div className="text-right text-[10px] text-slate-500 font-mono">
-            <div>SLA Countdown</div>
-            <div className="text-amber-400 font-bold flex items-center gap-1 mt-0.5">
-              <Clock className="h-3.5 w-3.5" /> 4h remaining
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="flex gap-2 border-b border-slate-900 pb-px text-xs font-semibold">
-        {[
-          { id: 'overview', name: 'Overview & PIR', icon: Terminal },
-          { id: 'tasks', name: 'Playbook Tasks', icon: CheckSquare },
-          { id: 'comments', name: 'Discussion Logs', icon: MessageSquare },
-          { id: 'evidence', name: 'Evidence Vault', icon: Paperclip },
-          { id: 'ai', name: 'AI Diagnostics', icon: BrainCircuit }
-        ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 border-b-2 transition-all ${
-              activeTab === t.id 
-                ? 'border-cyan-400 text-white bg-slate-950/10' 
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <t.icon className="h-4 w-4" /> {t.name}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Contents */}
-      <div className="min-h-[300px]">
-        
-        {/* Tab 1: Overview and Post-Incident Review */}
-        {activeTab === 'overview' && (
-          <div className="grid md:grid-cols-3 gap-6">
-            
-            {/* Properties */}
-            <div className="premium-card p-5 rounded-lg border border-slate-900 md:col-span-1 space-y-4">
-              <h4 className="font-bold text-xs text-white uppercase tracking-wider border-b border-slate-900 pb-2">Properties</h4>
-              
-              <div className="space-y-3 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Owner Analyst</span>
-                  <div className="text-white mt-0.5 flex items-center gap-1 font-mono font-semibold">
-                    <User className="h-3.5 w-3.5" /> {incident.assignedAnalystName || 'Unassigned'}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Priority Level</span>
-                  <span className="font-semibold text-rose-400 block mt-0.5">{incident.priority}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Detection Log Date</span>
-                  <span className="font-mono text-slate-400 block mt-0.5">{new Date(incident.detectionTime).toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Post-Incident Review Form */}
-            <div className="premium-card p-5 rounded-lg border border-slate-900 md:col-span-2 space-y-4">
-              <h4 className="font-bold text-xs text-white uppercase tracking-wider border-b border-slate-900 pb-2 flex items-center gap-1">
-                <ShieldCheck className="h-4.5 w-4.5 text-cyan-400" /> Post-Incident Review (PIR)
-              </h4>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase">Root Cause Analysis</label>
-                  <textarea
-                    rows={3}
-                    value={rootCause}
-                    onChange={(e) => setRootCause(e.target.value)}
-                    className="block w-full mt-1.5 rounded border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"
-                    placeholder="Enter architectural breakdowns, CVE exposures, or misconfiguration findings..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase">Resolution Playbook logs</label>
-                  <textarea
-                    rows={3}
-                    value={resolution}
-                    onChange={(e) => setResolution(e.target.value)}
-                    className="block w-full mt-1.5 rounded border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"
-                    placeholder="Enter mitigation actions executed, block commands, or system cleanups..."
-                  />
-                </div>
-
-                <div className="flex justify-end border-t border-slate-900 pt-4">
-                  <button
-                    onClick={handleSavePir}
-                    disabled={updatingPir}
-                    className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold text-xs px-4 py-2 rounded transition-colors shadow-md shadow-cyan-500/10"
+      {/* TAB 2: EVIDENCE */}
+      {activeTab === 'evidence' && (
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Related Detections / Alerts */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 border-b border-slate-900 pb-2">
+              Triggering Alerts & Rules ({detail.alerts?.length || 0})
+            </h3>
+            {detail.alerts && detail.alerts.length > 0 ? (
+              <div className="space-y-3">
+                {detail.alerts.map((alrt) => (
+                  <Link
+                    key={alrt.id}
+                    href={`/dashboard/alerts/${alrt.id}`}
+                    className="block p-3 rounded border border-slate-800 bg-slate-900/30 hover:border-cyan-500/50 transition-colors"
                   >
-                    {updatingPir ? 'Saving...' : 'Save Review Findings'}
-                  </button>
+                    <div className="flex items-center justify-between text-xs font-bold text-white">
+                      <span>{alrt.title}</span>
+                      <SeverityBadge severity={alrt.severity} />
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">{alrt.description}</p>
+                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 mt-2">
+                      <span>Source: {alrt.source}</span>
+                      <span className="text-cyan-400 flex items-center gap-1">Investigate Alert <ExternalLink className="h-2.5 w-2.5" /></span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500 font-mono">No linked alerts in evidence list.</div>
+            )}
+          </div>
+
+          {/* Triggering Events */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 border-b border-slate-900 pb-2">
+              Raw Security Events ({detail.triggeringEvents?.length || 0})
+            </h3>
+            {detail.triggeringEvents && detail.triggeringEvents.length > 0 ? (
+              <div className="space-y-3">
+                {detail.triggeringEvents.map((evt) => (
+                  <div key={evt.id} className="p-3 rounded border border-slate-800 bg-slate-900/30 text-xs space-y-1 font-mono">
+                    <div className="flex justify-between text-slate-400 text-[10px]">
+                      <span className="text-cyan-400">{evt.eventType}</span>
+                      <span>{new Date(evt.timestamp).toLocaleString()}</span>
+                    </div>
+                    <div className="text-white font-semibold">{evt.message}</div>
+                    <div className="text-[10px] text-slate-500">Source: {evt.source} | Outcome: {evt.outcome}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500 font-mono">No raw security events captured directly.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: RISK & ASSETS */}
+      {activeTab === 'risk' && (
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Affected Assets */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 border-b border-slate-900 pb-2">
+              Affected Assets ({detail.affectedAssets?.length || 0})
+            </h3>
+            {detail.affectedAssets && detail.affectedAssets.length > 0 ? (
+              <div className="space-y-3">
+                {detail.affectedAssets.map((ast) => (
+                  <Link
+                    key={ast.id}
+                    href={`/dashboard/assets/${ast.id}`}
+                    className="block p-3 rounded border border-slate-800 bg-slate-900/30 hover:border-cyan-500/50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between text-xs font-bold text-white">
+                      <span>{ast.displayName || ast.hostname}</span>
+                      <span className="text-xs font-mono text-cyan-400 font-bold">Risk: {ast.riskScore}%</span>
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-400 mt-1">IP: {ast.ipAddress} | Type: {ast.type}</div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500 font-mono">No asset records associated.</div>
+            )}
+          </div>
+
+          {/* IOCs & Vulnerabilities */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 border-b border-slate-900 pb-2">
+              Linked IOC Indicators ({detail.iocs?.length || 0})
+            </h3>
+            {detail.iocs && detail.iocs.length > 0 ? (
+              <div className="space-y-3">
+                {detail.iocs.map((ioc) => (
+                  <Link
+                    key={ioc.id}
+                    href={`/dashboard/ioc/${ioc.id}`}
+                    className="block p-3 rounded border border-slate-800 bg-slate-900/30 hover:border-cyan-500/50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between text-xs font-bold text-white font-mono">
+                      <span>{ioc.value}</span>
+                      <span className="text-rose-400 text-[10px] font-bold">{ioc.label}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1">Type: {ioc.type} | Detections: {ioc.detectionCount}</div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500 font-mono">No threat intelligence IOCs attached.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: RESPONSE CONTROLS & AUDIT */}
+      {activeTab === 'response' && (
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Lifecycle State Transitions */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 border-b border-slate-900 pb-2">
+              Incident Lifecycle Controls
+            </h3>
+            <div className="text-xs text-slate-400 font-mono">
+              Current State: <strong className="text-cyan-300 font-bold">{detail.status}</strong>
+            </div>
+
+            {nextStatuses.length > 0 ? (
+              <div className="space-y-2">
+                <div className="text-[11px] text-slate-400">Available Safe Transitions:</div>
+                <div className="flex flex-wrap gap-2">
+                  {nextStatuses.map((st) => (
+                    <button
+                      key={st}
+                      disabled={updatingStatus}
+                      onClick={() => handleStatusTransition(st)}
+                      className="px-3 py-1.5 rounded border border-cyan-800 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/60 font-semibold text-xs font-mono transition-colors disabled:opacity-50"
+                    >
+                      Transition to {st}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="text-xs text-slate-500 font-mono">Incident is in terminal state ({detail.status}).</div>
+            )}
 
-          </div>
-        )}
-
-        {/* Tab 2: Tasks Checklist */}
-        {activeTab === 'tasks' && (
-          <div className="premium-card p-5 rounded-lg border border-slate-900 space-y-4 max-w-2xl mx-auto">
-            <h4 className="font-bold text-xs text-white uppercase tracking-wider border-b border-slate-900 pb-2">Remediation Checklist Tasks</h4>
-            
-            <div className="space-y-2">
-              {incident.tasks.length === 0 ? (
-                <div className="text-center py-6 text-xs text-slate-500">No remediation tasks assigned.</div>
-              ) : (
-                incident.tasks.map((task: any) => (
-                  <div key={task.id} className="p-3 bg-slate-950/40 border border-slate-900 rounded flex justify-between items-center gap-4">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={task.status === 'COMPLETED'}
-                        onChange={() => handleToggleTask(task.id, task.status)}
-                        className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-500/20"
-                      />
-                      <span className={`text-xs ${task.status === 'COMPLETED' ? 'line-through text-slate-500 font-medium' : 'text-white font-semibold'}`}>
-                        {task.title}
-                      </span>
-                    </div>
-                    <span className="text-[9px] font-mono text-slate-500 font-bold uppercase">{task.priority} Priority</span>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <form onSubmit={handleAddTask} className="flex gap-2 border-t border-slate-900 pt-4 mt-6">
-              <input
-                type="text"
-                required
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                placeholder="Assign new validation action..."
-                className="flex-1 rounded border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs text-white focus:outline-none"
+            {/* Post Comment Box */}
+            <form onSubmit={handlePostComment} className="pt-4 border-t border-slate-900 space-y-3">
+              <div className="text-xs font-bold text-slate-300">Add Analyst Investigation Note</div>
+              <textarea
+                rows={3}
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Enter investigation observation or containment evidence..."
+                className="w-full rounded border border-slate-800 bg-slate-950/60 p-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
               />
               <button
                 type="submit"
-                className="bg-slate-900 border border-slate-800 hover:border-cyan-400 text-white font-bold text-xs px-4 py-1.5 rounded transition-all"
+                disabled={submittingComment || !newComment.trim()}
+                className="px-4 py-2 rounded bg-cyan-500 text-slate-950 font-bold text-xs hover:bg-cyan-400 transition-colors flex items-center gap-1.5 disabled:opacity-50"
               >
-                Add Action
+                <Send className="h-3.5 w-3.5" /> {submittingComment ? 'Posting...' : 'Post Investigation Note'}
               </button>
             </form>
           </div>
-        )}
 
-        {/* Tab 3: Discussion Room */}
-        {activeTab === 'comments' && (
-          <div className="premium-card p-5 rounded-lg border border-slate-900 space-y-4 max-w-2xl mx-auto">
-            <h4 className="font-bold text-xs text-white uppercase tracking-wider border-b border-slate-900 pb-2">Analyst Discussion Logs</h4>
-            
-            <div className="space-y-4 max-h-64 overflow-y-auto">
-              {incident.comments.length === 0 ? (
-                <div className="text-center py-6 text-xs text-slate-500 font-mono">No discussions logged yet.</div>
-              ) : (
-                incident.comments.map((c: any) => (
-                  <div key={c.id} className="p-3 bg-slate-950/60 rounded border border-slate-900 space-y-1">
-                    <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-                      <span className="font-bold text-slate-400">{c.authorName}</span>
-                      <span>{new Date(c.createdAt).toLocaleTimeString()}</span>
+          {/* Audit History Log */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 border-b border-slate-900 pb-2">
+              Relevant Audit Log History ({detail.auditHistory?.length || 0})
+            </h3>
+            {detail.auditHistory && detail.auditHistory.length > 0 ? (
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                {detail.auditHistory.map((aud) => (
+                  <div key={aud.id} className="p-2.5 rounded border border-slate-800 bg-slate-900/40 text-[11px] font-mono space-y-1">
+                    <div className="flex justify-between text-slate-400">
+                      <span className="text-purple-400 font-bold">{aud.action}</span>
+                      <span>{new Date(aud.timestamp).toLocaleString()}</span>
                     </div>
-                    <p className="text-xs text-slate-200">{c.content}</p>
+                    <div className="text-slate-300">Actor: {aud.actorEmail || aud.actorId}</div>
+                    <div className="text-[10px] text-slate-500 truncate">ReqID: {aud.requestId}</div>
                   </div>
-                ))
-              )}
-            </div>
-
-            <form onSubmit={handlePostComment} className="border-t border-slate-900 pt-4 space-y-3">
-              <textarea
-                required
-                rows={2}
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Log progress report or analyst comments..."
-                className="w-full rounded border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs text-white focus:outline-none resize-none"
-              />
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold text-xs px-4 py-1.5 rounded transition-colors shadow-md"
-                >
-                  Post Logs
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Tab 4: Evidence Vault */}
-        {activeTab === 'evidence' && (
-          <div className="premium-card p-5 rounded-lg border border-slate-900 space-y-4 max-w-xl mx-auto">
-            <div className="flex justify-between items-center border-b border-slate-900 pb-2">
-              <h4 className="font-bold text-xs text-white uppercase tracking-wider">Evidence Artifact Files</h4>
-              <button
-                onClick={handleUploadEvidence}
-                className="text-xs text-cyan-400 hover:text-cyan-300 font-bold"
-              >
-                Log Mock File
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              {incident.evidence.length === 0 ? (
-                <div className="text-center py-6 text-xs text-slate-500">No evidence artifacts attached.</div>
-              ) : (
-                incident.evidence.map((ev: any) => (
-                  <div key={ev.id} className="p-3 bg-slate-950/40 border border-slate-900 rounded flex justify-between items-center text-xs">
-                    <div className="flex items-center gap-2">
-                      <FileCode className="h-4.5 w-4.5 text-slate-400" />
-                      <div>
-                        <span className="font-semibold text-white block">{ev.fileName}</span>
-                        <span className="text-[10px] text-slate-500 block font-mono">{ev.mimeType} • {(ev.fileSize / 1024).toFixed(1)} KB</span>
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-mono font-bold text-emerald-400 border border-emerald-500/20 bg-emerald-950/15 px-1.5 py-0.5 rounded">
-                      {ev.status}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Tab 5: AI Diagnostics Copilot */}
-        {activeTab === 'ai' && (
-          <div className="premium-card p-5 rounded-lg border border-slate-900 space-y-4 max-w-2xl mx-auto">
-            <div className="flex justify-between items-center border-b border-slate-900 pb-2">
-              <h4 className="font-bold text-xs text-white uppercase tracking-wider flex items-center gap-1">
-                <BrainCircuit className="h-5 w-5 text-cyan-400" /> AI Incident Playbook Advisor
-              </h4>
-              <button
-                onClick={handleTriggerAI}
-                disabled={aiLoading}
-                className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold text-xs px-3 py-1.5 rounded transition-all shadow-md"
-              >
-                {aiLoading ? 'Analyzing...' : 'Audit via AI'}
-              </button>
-            </div>
-
-            {aiReport ? (
-              <div className="p-4 bg-cyan-950/10 border border-cyan-800/10 rounded font-mono text-xs text-slate-300 space-y-3 whitespace-pre-line leading-relaxed">
-                {aiReport}
+                ))}
               </div>
             ) : (
-              <div className="p-4 bg-slate-950/30 rounded border border-slate-900 text-center py-10 text-xs text-slate-500">
-                Click 'Audit via AI' to request context-aware playbook recommendations.
-              </div>
+              <div className="text-xs text-slate-500 font-mono">No direct audit log history attached.</div>
             )}
           </div>
-        )}
-
-      </div>
-
+        </div>
+      )}
     </div>
   );
 }

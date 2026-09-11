@@ -395,3 +395,84 @@ export interface IntelligenceInvestigationResult {
   };
   external: IntelligenceProviderResult;
 }
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: PaginationMeta;
+}
+
+export interface TimelineItem {
+  id: string;
+  timestamp: string;
+  type: 'SECURITY_EVENT' | 'ALERT' | 'INCIDENT_TRANSITION' | 'INTELLIGENCE_ACTIVITY' | 'AUDIT_LOG' | 'COMMENT' | 'TASK';
+  source: string;
+  title: string;
+  description: string;
+  severity?: AlertSeverity;
+  metadata?: Record<string, any>;
+  referenceId?: string;
+  referenceType?: string;
+}
+
+export interface EventSearchQuery {
+  startTime?: string;
+  endTime?: string;
+  eventType?: string;
+  severity?: AlertSeverity;
+  source?: string;
+  assetId?: string;
+  userIdentity?: string;
+  ipAddress?: string;
+  domain?: string;
+  ioc?: string;
+  detectionStatus?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface IncidentInvestigationDetail extends Incident {
+  alerts: Alert[];
+  tasks: IncidentTask[];
+  comments: IncidentComment[];
+  evidence: Evidence[];
+  triggeringEvents: SecurityEvent[];
+  affectedAssets: Asset[];
+  users: Array<{ id?: string; email?: string; name: string; role?: string }>;
+  iocs: IOC[];
+  vulnerabilities: AssetVulnerability[];
+  auditHistory: AuditLog[];
+  timeline: TimelineItem[];
+}
+
+export interface AlertInvestigationDetail extends Alert {
+  asset?: Asset;
+  incident?: Partial<Incident>;
+  detectionRule?: Record<string, any>;
+  detectionReason?: string;
+  matchedConditions?: Record<string, any>;
+  contributingEvents: SecurityEvent[];
+  ioc?: IOC;
+}
+
+export interface IocInvestigationDetail extends IOC {
+  observations: SecurityEvent[];
+  alerts: Alert[];
+  incidents: Incident[];
+  affectedAssets: Asset[];
+  enrichments: IOCEnrichment[];
+  intelligenceResult?: IntelligenceInvestigationResult;
+  timeline?: TimelineItem[];
+}
+
+export interface AssetInvestigationDetail extends Asset {
+  riskSummary: {
+    score: number;
+    contributors: Array<{ label: string; score: number; reason: string }>;
+  };
+  recentEvents: SecurityEvent[];
+  alerts: Alert[];
+  incidents: Incident[];
+  vulnerabilities: AssetVulnerability[];
+  relatedIocs: IOC[];
+  timeline?: TimelineItem[];
+}
