@@ -1,7 +1,11 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_IN_MEMORY_QUEUE_FALLBACK === 'true') {
+  delete process.env.REDIS_URL;
+}
 
 import { validateEnv } from './common/env.validation.js';
 validateEnv();

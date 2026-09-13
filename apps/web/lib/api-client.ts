@@ -10,7 +10,7 @@ import type {
   TimelineItem,
 } from 'shared-types';
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010/api/v1';
 
 export class ApiClientError extends Error {
   status: number;
@@ -34,6 +34,9 @@ export function persistSession(session: AuthSession) {
   localStorage.setItem('threatsync-session', JSON.stringify(session));
   localStorage.setItem('user', JSON.stringify(session.user));
   localStorage.setItem('memberships', JSON.stringify(session.memberships));
+  if (session.tokens) {
+    localStorage.setItem('threatsync-access-token', session.tokens.accessToken);
+  }
 }
 
 export function getStoredSession(): AuthSession | null {
@@ -75,11 +78,14 @@ export function getActiveMembership(): OrganizationMembership | null {
 }
 
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const accessToken = typeof window !== 'undefined' ? localStorage.getItem('threatsync-access-token') : null;
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(options.headers || {}),
     },
   });

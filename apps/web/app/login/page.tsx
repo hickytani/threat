@@ -28,31 +28,12 @@ export default function LoginPage() {
       persistSession(data);
       router.push('/dashboard');
     } catch (err: any) {
-      console.warn('API backend offline, initiating Analyst Demo Session:', err);
-      // Fallback to developer analyst session
-      const demoSession: AuthSession = {
-        user: {
-          id: 'usr_demo_sarah',
-          email: email || 'analyst@threatsync.local',
-          fullName: 'Sarah Connor',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        memberships: [
-          {
-            id: 'mem_demo_soc',
-            organizationId: 'org_demo_soc',
-            userId: 'usr_demo_sarah',
-            role: 'ORG_ADMIN' as any,
-            organizationName: 'Default SOC Organization',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-      };
-      persistSession(demoSession);
-      router.push('/dashboard');
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Authentication failed. Confirm the Python API is running on localhost:8000.';
+
+      setError(message);
     } finally {
       setLoading(false);
     }

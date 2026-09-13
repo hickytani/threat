@@ -9,11 +9,11 @@ Follow this checklist to prepare and record a seamless 60–90 second technical 
 Before hitting record, complete these environment checks:
 
 - [ ] **Database Running**: Verify PostgreSQL database is accessible via Prisma (`npm run prisma:generate` / seed status).
-- [ ] **Redis Service**: (Optional/Prod Mode) Verify Redis server is running on `127.0.0.1:6379` if testing BullMQ queue worker paths.
-- [ ] **Database Seeded**: Execute `npm run seed -w apps/api` to load the primary deterministic SOC scenario (`Acme Corp` tenant).
+- [ ] **Redis Service**: Verify Redis is running on `127.0.0.1:6379` for BullMQ worker paths, or use the explicitly enabled local in-memory fallback.
+- [ ] **Database Seeded**: Log in as the seeded analyst and call `POST /api/v1/organizations/current/seed-demo` to load the deterministic SOC scenario for the active tenant.
 - [ ] **API Running**: Verify NestJS backend is active (`http://localhost:3001/api/v1/health` returns status `ok`).
 - [ ] **Web Server Running**: Verify Next.js frontend is active (`http://localhost:3000`).
-- [ ] **User Session**: Log in as `analyst@acme.com` / `Password123!` and navigate to `/dashboard`.
+- [ ] **User Session**: Log in as the locally seeded analyst account documented in the local setup notes and navigate to `/dashboard`.
 - [ ] **Primary Scenario Check**:
   - [ ] Alert: `Suspicious Credential Dumping via LSASS Access` present under `/dashboard/alerts`
   - [ ] Incident: `INC-2026-001 - Active Credential Access Campaign` present under `/dashboard/incidents`

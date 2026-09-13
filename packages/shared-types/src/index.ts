@@ -354,13 +354,20 @@ export interface PaginationMeta {
 export interface OrganizationMembership {
   id: string;
   organizationId: string;
+  userId?: string;
   organizationName: string;
   role: UserRole;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AuthSession {
-  user: Pick<User, 'id' | 'email' | 'fullName'>;
+  user: Pick<User, 'id' | 'email' | 'fullName' | 'isActive' | 'createdAt' | 'updatedAt'>;
   memberships: OrganizationMembership[];
+  tokens?: {
+    accessToken: string;
+    refreshToken?: string;
+  };
 }
 
 export interface ApiErrorResponse {

@@ -12,7 +12,7 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "baseUrl": "./",
-    "incremental": true,
+    "incremental": false,
     "isolatedModules": true,
     "ignoreDeprecations": "5.0",
     "skipLibCheck": true,

@@ -339,7 +339,7 @@ npm run dev:web    # http://localhost:3000
 3. **Alert detail** (`/dashboard/alerts/[id]`) — detection rule, confidence score, source IP
 4. **Incident** — follow the linked incident badge
 5. **Incident Timeline** — chronological sequence: event → detection → alert → triage actions
-6. **Assets & Risk tab** — click `dc-01.threatsync.local` → risk score 82.5%, CVE-2021-44228
+6. **Assets & Risk tab** — open a seeded asset → inspect its explainable risk score on a 0–100 scale and mapped vulnerabilities
 7. **IOC** — inspect `198.51.100.99` → enrichment data, observed alerts, related events
 8. **Response Controls tab** — transition incident from `OPEN` → `TRIAGED`
 9. **Add analyst note** — post an investigation observation

@@ -16,7 +16,7 @@ This script is designed for recording a concise, natural, and technical demonstr
 > **Visual**: Click on `/dashboard` Overview widgets and pipeline cards.
 >
 > **Script**:
-> *"On the Overview dashboard, analysts get a real-time summary of active security alerts, open incidents, and high-risk assets. Security events move through a multi-stage pipeline: normalization, deduplication, detection evaluation, and correlation."*
+> *"On the Overview dashboard, analysts get a database-backed summary of active security alerts, open incidents, and high-risk assets. Security events move through a multi-stage pipeline: normalization, deduplication, detection evaluation, and correlation."*
 
 ---
 
