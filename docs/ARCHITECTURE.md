@@ -1,40 +1,63 @@
-# ThreatSync OS — System Architecture Specification
+# ThreatSync OS — Architecture Overview
 
-ThreatSync OS is an enterprise Security Operations Center (SOC) investigation platform and telemetry processing engine built with a multi-tenant monorepo architecture.
+ThreatSync OS is a portfolio project that models a security operations workflow in a multi-tenant monorepo architecture. It is intended to demonstrate strong engineering fundamentals in a local demo environment rather than a live enterprise SOC deployment.
 
-## Monorepo Layout
+## Monorepo structure
 
 ```text
-threatsync-os/
+threat/
 ├── apps/
-│   ├── api/          # NestJS 10 REST API, Auth, Queues & Domain Services
-│   └── web/          # Next.js 14 App Router SOC Analyst Console
+│   ├── api/          # NestJS backend, auth, queue logic, and domain services
+│   └── web/          # Next.js analyst console and dashboard UI
 ├── packages/
-│   ├── database/     # Prisma ORM Schema & Migration Engine (PostgreSQL)
-│   └── shared-types/ # Shared TypeScript Contracts, Enums & DTO Interfaces
-└── docs/             # Technical Specifications & Operational Runbooks
+│   ├── database/     # Prisma schema and local data model
+│   └── shared-types/ # Shared TypeScript contracts and enums
+├── docs/             # project documentation and demo materials
+├── README.md
+├── package.json
+└── tsconfig.json
 ```
 
-## System Layers
+## System layers
 
-### 1. Database & Persistence Layer (`packages/database`)
-- **PostgreSQL**: Relational database storing Tenant Organizations, Assets, Security Events, Detection Rules, Alerts, Incidents, IOCs, Asset Vulnerabilities, and Audit Logs.
-- **Compound Indexes**: Optimized B-tree indexes for organization-scoped investigation queries:
-  - `SecurityEvent`: `[organizationId, timestamp]`, `[organizationId, assetId]`, `[organizationId, eventType]`, `[organizationId, sourceIp]`
-  - `Alert`: `[organizationId, timestamp]`
-  - `AuditLog`: `[organizationId, resourceType, resourceId]`
+### 1. Persistence layer (`packages/database`)
+- Prisma models represent the core security workflow: organizations, users, assets, alerts, incidents, events, IOC references, and audit records.
+- The schema is designed to support local deterministic workflow demos and PostgreSQL-compatible production-style modeling.
+- Seed data provides a realistic local SOC scenario without claiming live enterprise telemetry ingestion.
 
-### 2. Backend Domain Services (`apps/api`)
-- **NestJS Architecture**: Modular controllers, services, guards, and middleware.
-- **Tenant Isolation**: `TenantGuard` and `TenantScopedRepository` bind every database query to `request.user.organizationId` derived from the session JWT token. Arbitrary client overrides are rejected.
-- **Asynchronous Queue Engine**: BullMQ with Redis backing (`telemetry-ingestion` and `alert-escalation` queues) for decoupled event processing, retries (exponential backoff), idempotency deduplication, and dead-letter queueing (`removeOnFail`).
-- **Correlation & Risk Engines**: `CorrelationService` evaluates incoming alerts against multi-asset lateral movement and threat indicator rules to correlate alerts into unified `Incident` tickets and update dynamic `Asset` risk scores (0–100%).
+### 2. Backend layer (`apps/api`)
+- NestJS organizes the application into modular services and controllers.
+- JWT and organization-aware authorization provide the multi-tenant security model.
+- The API normalizes events, enforces duplicate suppression, evaluates rule conditions, correlates related alerts, and records audit events.
+- BullMQ and Redis are used for async queue processing when configured in the local environment.
 
-### 3. API Contract & Shared Types Layer (`packages/shared-types`)
-- Shared TypeScript interfaces (`IncidentInvestigationDetail`, `AlertInvestigationDetail`, `IocInvestigationDetail`, `AssetInvestigationDetail`, `PaginatedResponse<T>`, `TimelineItem`, `EventSearchQuery`).
-- Enums for `AlertSeverity`, `AlertStatus`, `IncidentStatus`, `AssetType`, `IocType`, `UserRole`.
+### 3. Shared contracts (`packages/shared-types`)
+- Shared TypeScript types define the application’s core interfaces so the frontend and backend remain aligned.
+- This reduces drift between UI expectations and API response shapes.
 
-### 4. Analyst Console Interface (`apps/web`)
-- **Next.js 14 App Router**: React 18, TailwindCSS, Lucide Icons, and ReactFlow.
-- **Centralized API Client**: `apps/web/lib/api-client.ts` centralizes all HTTP calls (`apiRequest<T>`), passing session cookies and handling error status contracts (401, 403, 404, 500).
-- **Investigation Consoles**: Deep entity investigation pages with deterministic timelines, detection evidence, explainable risk contributors, and lifecycle state transition controls.
+### 4. Analyst console (`apps/web`)
+- Next.js renders the investigation dashboard and workflow views.
+- The UI focuses on analyst tasks such as reviewing alerts, looking at asset risk, tracing incidents, and reviewing audit history.
+- The front end is meant to demonstrate workflow structure and domain understanding rather than imply a production SOC deployment.
+
+## Local intelligence model
+
+The project explicitly separates local intelligence from external provider configuration:
+
+- Local deterministic path: the default path used for portfolio validation and demo work
+- External provider path: configuration-dependent and not assumed by default
+
+This is important for honest portfolio communication. The app can demonstrate SOC workflow reasoning without claiming live commercial intelligence feeds or production telemetry.
+
+## Architecture summary
+
+The project is best understood as a local, deterministic security workflow system that shows:
+
+- event normalization and duplicate handling
+- rule-based detection logic
+- alert and incident correlation
+- explainable risk scoring
+- analyst-facing investigation workflow
+- backend-enforced auditability and tenant-aware access patterns
+
+That makes it a credible engineering portfolio project while staying accurate about what it is and is not.

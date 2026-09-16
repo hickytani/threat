@@ -70,7 +70,6 @@ export class HealthController {
       dependencies: {
         database: dbStatus,
         redis: redisStatus,
-        ai: process.env.AI_PROVIDER || 'mock',
       },
       timestamp: new Date().toISOString(),
     };

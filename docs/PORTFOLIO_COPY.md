@@ -1,28 +1,43 @@
-# ThreatSync OS — Portfolio Copy & Descriptions
+# ThreatSync OS — Portfolio Copy & Hiring Materials
 
-Use these copy snippets across resume entries, personal portfolio cards, GitHub project headers, and interview intros.
-
----
-
-### 1. One-Line Summary (For Portfolio Project Cards & Badges)
-> *"Multi-tenant security operations platform for telemetry ingestion, deterministic detection, evidence-backed alert correlation, explainable risk scoring, and auditable incident response."*
+Use these snippets for GitHub, portfolio highlights, resume bullets, or interview introductions. Keep the framing technical, grounded, and honest.
 
 ---
 
-### 2. 50-Word Version (For Portfolio Grid / Summary Pages)
-> *"ThreatSync OS is a full-stack security operations and incident investigation platform built with Next.js, NestJS, Prisma, and Redis/BullMQ. It normalizes security telemetry, evaluates deterministic detection rules, correlates alerts into unified incidents, provides explainable asset risk scores out of 100, and enforces database-level tenant isolation with 76 passing automated tests."*
+### 1. One-line project summary
+> ThreatSync OS is a local, deterministic SOC investigation platform that demonstrates event ingestion, detection-rule evaluation, alert correlation, asset risk scoring, and auditable incident workflows.
 
 ---
 
-### 3. 100-Word Version (For Portfolio Detail Pages / Case Studies)
-> *"ThreatSync OS is an end-to-end multi-tenant security operations platform designed for real-world telemetry analysis and incident investigation. Built on Next.js 14, NestJS, Prisma, and BullMQ/Redis, the system decouples synchronous API event ingestion from background queue workers. Incoming events undergo normalization and SHA-256 deduplication before evaluation against deterministic detection rules. Related alerts are automatically correlated into unified incidents based on asset, identity, network, and IOC relationships. The platform exposes transparent asset risk scoring, an external threat-intelligence provider abstraction, strict JWT/repository tenant isolation, and auditable incident state transitions validated by 76 automated integration tests."*
+### 2. 50-word summary
+> ThreatSync OS is a full-stack security operations demo built with Next.js, NestJS, Prisma, and Redis/BullMQ. The platform ingests telemetry, normalizes and deduplicates events, evaluates deterministic detection rules, correlates related alerts into incidents, and records audit trails with tenant-aware backend enforcement.
 
 ---
 
-### 4. Technical Version (For GitHub Header / Readme Intro)
-> *"Full-stack multi-tenant SOC investigation platform engineered with Next.js 14, NestJS, Prisma, and BullMQ/Redis. Features event normalization, deterministic detection evaluation, evidence-backed alert correlation, explainable risk scoring (0–100 scale), abstracted threat intelligence providers, database-enforced tenant data isolation, and backend-authoritative audit logging."*
+### 3. 100-word portfolio version
+> ThreatSync OS is a full-stack security operations platform designed as a local engineering demo for SOC workflow orchestration. Built with Next.js, NestJS, Prisma, and BullMQ/Redis, it demonstrates event normalization, duplicate suppression, rule-based alert generation, and explainable asset risk scoring. Related alerts are correlated into shared incidents based on asset, identity, network, and IOC context, while backend-side authorization and audit logging enforce multi-tenant safety boundaries. The default threat-intelligence path is deterministic and local; external providers can be configured separately when environment support exists.
 
 ---
 
-### 5. Spoken Interview Version (30-Second Elevator Pitch)
-> *"I built ThreatSync OS to address key engineering challenges in security operations—specifically cross-tenant data isolation, noisy alerting, and unexplainable risk scores. The system ingests telemetry via NestJS REST endpoints, pushes events to a Redis-backed BullMQ queue for idempotent worker processing, runs deterministic detection rules, and correlates alerts into unified incidents. Database queries enforce tenant isolation at the repository level, and the entire platform is backed by 76 passing automated tests."*
+### 4. Resume-ready bullets
+- Built a full-stack SOC investigation platform with a NestJS API, Next.js analyst dashboard, Prisma data layer, and Redis-backed async queue processing.
+- Implemented tenant-aware authorization, request-scoped validation, and audit logging to model secure multi-tenant access patterns.
+- Designed a deterministic event pipeline that normalizes telemetry, suppresses duplicates, evaluates rule conditions, and correlates alerts into incident narratives.
+- Created explainable asset risk scoring with per-factor contributors instead of opaque score generation.
+- Verified the project locally with automated tests, build checks, and live Redis-backed queue processing for the demo environment.
+- Kept the threat-intelligence path explicit: local deterministic intelligence is the default; external providers are configuration-dependent rather than assumed by default.
+
+---
+
+### 5. Technical GitHub intro
+> ThreatSync OS is a portfolio project for a security operations workflow: a Next.js analyst console, NestJS backend, Prisma schema, and Redis/BullMQ queue pipeline for telemetry ingestion, rule evaluation, incident correlation, and auditability.
+
+---
+
+### 6. Speaker-friendly interview version
+> I built ThreatSync OS to explore how a SOC platform handles the core engineering problems behind alert generation, incident correlation, and tenant-aware access. The project demonstrates how events are normalized, deduplicated, evaluated against rules, and pushed through a Redis-backed worker pipeline before being correlated into investigations. I also emphasize explainable risk scoring and backend-enforced audit trails, while keeping the default threat-intelligence path local and deterministic rather than pretending the app is connected to live enterprise telemetry feeds.
+
+---
+
+### 7. Hiring-manager validation statement
+> ThreatSync OS is a strong portfolio project because it demonstrates end-to-end backend and frontend engineering discipline, not because it claims production SOC deployment or live external telemetry feeds. It shows real architectural thinking around authorization, state handling, queueing, and explainability in a security domain.

@@ -33,11 +33,9 @@ import {
 
 import CyberVideoBackdrop from '../components/CyberVideoBackdrop';
 import GlowCard from '../components/GlowCard';
-import InteractiveThreatRadar from '../components/InteractiveThreatRadar';
 import MediaHeroShowcase from '../components/MediaHeroShowcase';
 import AnimatedMetrics from '../components/AnimatedMetrics';
 import InteractiveArchitecturePipeline from '../components/InteractiveArchitecturePipeline';
-import BiometricCameraScanner from '../components/BiometricCameraScanner';
 
 export default function LandingPage() {
   const heroRef = useRef<HTMLDivElement>(null);
@@ -80,14 +78,15 @@ export default function LandingPage() {
           </div>
 
           <nav className="hidden md:flex items-center gap-8 text-xs font-mono font-semibold uppercase tracking-wider text-slate-300">
-            <a href="#biometric" className="hover:text-cyan-400 transition-colors flex items-center gap-1.5">
-              <Camera className="h-3.5 w-3.5 text-cyan-400" /> Biometric Scanner
+            <a href="#pipeline" className="hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+              <Workflow className="h-3.5 w-3.5 text-cyan-400" /> SOC Pipeline
             </a>
-            <a href="#radar" className="hover:text-cyan-400 transition-colors flex items-center gap-1.5">
-              <Radio className="h-3.5 w-3.5 text-cyan-400 animate-ping" /> Real-time Radar
+            <a href="#capabilities" className="hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+              <Zap className="h-3.5 w-3.5 text-cyan-400" /> Capabilities
             </a>
-            <a href="#pipeline" className="hover:text-cyan-400 transition-colors">SOC Pipeline</a>
-            <a href="#capabilities" className="hover:text-cyan-400 transition-colors">Capabilities</a>
+            <Link href="/onboarding" className="hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+              <Layers className="h-3.5 w-3.5 text-cyan-400" /> Onboarding
+            </Link>
           </nav>
 
           <div className="flex items-center gap-3 font-mono">
@@ -150,18 +149,8 @@ export default function LandingPage() {
         {/* GSAP Animated Metrics Bar */}
         <AnimatedMetrics />
 
-        {/* Innovative Biometric Camera Scanner Section */}
-        <section id="biometric">
-          <BiometricCameraScanner />
-        </section>
-
-        {/* Real-time Interactive Threat Radar Widget */}
-        <section id="radar" className="my-16">
-          <InteractiveThreatRadar />
-        </section>
-
         {/* Architectural Flow Pipeline Visualizer */}
-        <section id="pipeline">
+        <section id="pipeline" className="my-16">
           <InteractiveArchitecturePipeline />
         </section>
 

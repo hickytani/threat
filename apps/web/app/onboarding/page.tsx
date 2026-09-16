@@ -2,23 +2,24 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiRequest, getStoredSession } from '@/lib/api-client';
+import { apiRequest, getStoredSession, createIngestionCredential, getIngestionCredentials } from '@/lib/api-client';
 import { 
   Shield, 
   Building2, 
   Layers, 
   Plus, 
   Database, 
-  Users, 
   CheckCircle2, 
   ArrowRight, 
   ArrowLeft, 
-  Loader2, 
-  FileText,
+  Loader2,
   Radio,
   PlusCircle,
   Trash2,
-  Lock
+  Lock,
+  Copy,
+  Check,
+  Terminal
 } from 'lucide-react';
 
 export default function OnboardingWizard() {
@@ -26,6 +27,8 @@ export default function OnboardingWizard() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [organization, setOrganization] = useState<any>(null);
+  const [credentialToken, setCredentialToken] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
   // Form states
   const [profile, setProfile] = useState({
@@ -44,17 +47,12 @@ export default function OnboardingWizard() {
     primaryConcern: 'Ransomware / Data Exfiltration'
   });
 
-  const [assetMethod, setAssetMethod] = useState('demo'); // manual, csv, demo
+  const [assetMethod, setAssetMethod] = useState<'demo' | 'manual'>('demo');
   const [manualAssets, setManualAssets] = useState<any[]>([
-    { hostname: 'dc-01.prod.lan', type: 'SERVER', ipAddress: '192.0.2.10', criticality: 'CRITICAL' }
+    { hostname: 'dc-01.prod.lan', type: 'SERVER', ipAddress: '192.168.1.10', criticality: 'CRITICAL' }
   ]);
 
-  const [alertSource, setAlertSource] = useState('demo'); // webhook, json, demo
-  const [teamMembers, setTeamMembers] = useState<any[]>([
-    { email: '', role: 'SECURITY_ANALYST' }
-  ]);
-
-  // Load organization from the authenticated session saved by the shared API client
+  // Load organization from authenticated session
   useEffect(() => {
     const session = getStoredSession();
     const activeMembership = session?.memberships?.[0];
@@ -65,8 +63,31 @@ export default function OnboardingWizard() {
     }
   }, []);
 
+  // When reaching step 4, provision or fetch an ingestion credential for telemetry onboarding
+  useEffect(() => {
+    if (step === 4 && !credentialToken) {
+      provisionCredential();
+    }
+  }, [step]);
+
+  const provisionCredential = async () => {
+    try {
+      const existing = await getIngestionCredentials();
+      if (existing && existing.length > 0 && existing[0].token) {
+        setCredentialToken(existing[0].token);
+      } else {
+        const created = await createIngestionCredential('Default Ingestion Credential');
+        if (created?.token) {
+          setCredentialToken(created.token);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to auto-provision ingestion credential:', err);
+    }
+  };
+
   const handleNext = () => {
-    if (step < 6) {
+    if (step < 4) {
       setStep(step + 1);
     } else {
       completeOnboarding();
@@ -93,31 +114,21 @@ export default function OnboardingWizard() {
     setManualAssets(updated);
   };
 
-  const addTeamMember = () => {
-    setTeamMembers([...teamMembers, { email: '', role: 'SECURITY_ANALYST' }]);
-  };
-
-  const removeTeamMember = (idx: number) => {
-    setTeamMembers(teamMembers.filter((_, i) => i !== idx));
-  };
-
-  const updateTeamMember = (idx: number, field: string, value: string) => {
-    const updated = [...teamMembers];
-    updated[idx][field] = value;
-    setTeamMembers(updated);
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const completeOnboarding = async () => {
     setLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
       const orgId = organization?.organizationId;
-
       if (!orgId) {
         throw new Error('Organization ID context is missing.');
       }
 
-      // Step 1 & 2: Update Organization settings using the authenticated tenant context
+      // 1. Update Organization settings
       await apiRequest('/organizations/current', {
         method: 'PATCH',
         body: JSON.stringify({
@@ -128,23 +139,47 @@ export default function OnboardingWizard() {
         }),
       });
 
-      // If user selected demo data, seed the current tenant using the real backend endpoint
-      if (assetMethod === 'demo' || alertSource === 'demo') {
+      // 2. Process Asset Onboarding
+      if (assetMethod === 'demo') {
         await apiRequest('/organizations/current/seed-demo', {
           method: 'POST',
         });
+      } else if (assetMethod === 'manual') {
+        for (const asset of manualAssets) {
+          if (asset.hostname && asset.hostname.trim()) {
+            try {
+              await apiRequest('/assets', {
+                method: 'POST',
+                body: JSON.stringify({
+                  hostname: asset.hostname.trim(),
+                  displayName: asset.hostname.trim(),
+                  type: asset.type || 'SERVER',
+                  ipAddress: asset.ipAddress?.trim() || '0.0.0.0',
+                  businessCriticality: asset.criticality || 'MEDIUM',
+                  environment: 'PROD',
+                  isInternetFacing: false,
+                }),
+              });
+            } catch (assetErr) {
+              console.warn(`Failed to create asset ${asset.hostname}:`, assetErr);
+            }
+          }
+        }
       }
 
-      // Redirect to main operations overview dashboard
       router.push('/dashboard');
     } catch (err) {
-      console.error(err);
-      // Even if network calls fail in mock phase, let's allow dashboard access for demo purposes
+      console.error('Error completing onboarding:', err);
       router.push('/dashboard');
     } finally {
       setLoading(false);
     }
   };
+
+  const curlCommand = `curl -X POST http://localhost:3001/api/v1/events/ingest \\
+  -H "Content-Type: application/json" \\
+  -H "X-Ingestion-Token: ${credentialToken || '<TOKEN>'}" \\
+  -d '{"eventType":"ENDPOINT_ANOMALY","source":"Sysmon","message":"Unauthorized privilege escalation detected","hostname":"${manualAssets[0]?.hostname || 'dc-01.prod.lan'}","severity":"HIGH"}'`;
 
   return (
     <div className="flex min-h-screen bg-[#030712] text-slate-100 flex-col justify-between">
@@ -156,16 +191,16 @@ export default function OnboardingWizard() {
             <span className="font-bold text-lg tracking-wider text-white">THREATSYNC <span className="text-cyan-400">OS</span></span>
           </div>
           <div className="flex items-center gap-2 text-sm text-slate-500">
-            <Lock className="h-4 w-4" /> Secure Onboarding Pipeline
+            <Lock className="h-4 w-4" /> Tenant Onboarding
           </div>
         </div>
       </header>
 
       {/* Steps Indicator */}
-      <div className="container mx-auto px-4 max-w-3xl mt-8">
+      <div className="container mx-auto px-4 max-w-2xl mt-8">
         <div className="flex justify-between items-center relative">
           <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-800 -z-10" />
-          {[1, 2, 3, 4, 5, 6].map((num) => (
+          {[1, 2, 3, 4].map((num) => (
             <div 
               key={num}
               className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${
@@ -178,25 +213,25 @@ export default function OnboardingWizard() {
             </div>
           ))}
         </div>
-        <div className="flex justify-between text-[10px] md:text-xs text-slate-400 mt-2">
-          <span>Profile</span>
+        <div className="flex justify-between text-[11px] text-slate-400 mt-2 px-1">
+          <span>Organization</span>
           <span>Environment</span>
           <span>Assets</span>
-          <span>Alerts</span>
-          <span>Team</span>
-          <span>Confirm</span>
+          <span>Telemetry & Launch</span>
         </div>
       </div>
 
       {/* Main Form Body */}
-      <main className="container mx-auto px-4 max-w-3xl my-8 flex-grow">
+      <main className="container mx-auto px-4 max-w-2xl my-8 flex-grow">
         <div className="premium-card p-8 rounded-xl border border-slate-800">
           
           {/* Step 1: Org Profile */}
           {step === 1 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2"><Building2 className="text-cyan-400" /> Step 1: Organization Profile</h3>
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Building2 className="text-cyan-400" /> Step 1: Organization Profile
+                </h3>
                 <p className="text-sm text-slate-400 mt-1">Configure your corporate workspace details</p>
               </div>
 
@@ -248,7 +283,9 @@ export default function OnboardingWizard() {
           {step === 2 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2"><Layers className="text-cyan-400" /> Step 2: Security Environment</h3>
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Layers className="text-cyan-400" /> Step 2: Security Environment
+                </h3>
                 <p className="text-sm text-slate-400 mt-1">Specify your current enterprise footprint and threats</p>
               </div>
 
@@ -303,23 +340,25 @@ export default function OnboardingWizard() {
           {step === 3 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2"><Database className="text-cyan-400" /> Step 3: Register Assets</h3>
-                <p className="text-sm text-slate-400 mt-1">Populate your corporate device and workload inventory</p>
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Database className="text-cyan-400" /> Step 3: Asset Onboarding
+                </h3>
+                <p className="text-sm text-slate-400 mt-1">Choose how you want to populate your initial asset catalog</p>
               </div>
 
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-2 gap-4">
                 <button
                   type="button"
                   onClick={() => setAssetMethod('demo')}
                   className={`p-4 border rounded-lg text-left transition-all ${
                     assetMethod === 'demo' 
-                      ? 'border-cyan-500 bg-cyan-950/20' 
-                      : 'border-slate-800 bg-slate-900/30'
+                      ? 'border-cyan-500 bg-cyan-950/20 shadow-sm shadow-cyan-500/10' 
+                      : 'border-slate-800 bg-slate-900/30 hover:border-slate-700'
                   }`}
                 >
                   <CheckCircle2 className="h-5 w-5 text-cyan-400 mb-2" />
-                  <span className="block font-semibold text-white">Generate Mock Data</span>
-                  <span className="block text-xs text-slate-400 mt-1">Pre-seed 50 realistic workstations, servers, and cloud instances.</span>
+                  <span className="block font-semibold text-white">Seed Demonstration Catalog</span>
+                  <span className="block text-xs text-slate-400 mt-1">Populates realistic servers, workstations, active alerts, and vulnerability exposures.</span>
                 </button>
 
                 <button
@@ -327,65 +366,64 @@ export default function OnboardingWizard() {
                   onClick={() => setAssetMethod('manual')}
                   className={`p-4 border rounded-lg text-left transition-all ${
                     assetMethod === 'manual' 
-                      ? 'border-cyan-500 bg-cyan-950/20' 
-                      : 'border-slate-800 bg-slate-900/30'
+                      ? 'border-cyan-500 bg-cyan-950/20 shadow-sm shadow-cyan-500/10' 
+                      : 'border-slate-800 bg-slate-900/30 hover:border-slate-700'
                   }`}
                 >
-                  <Plus className="h-5 w-5 text-slate-400 mb-2" />
-                  <span className="block font-semibold text-white">Manual Registry</span>
-                  <span className="block text-xs text-slate-400 mt-1">Enter your high-criticality assets individually.</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAssetMethod('csv')}
-                  className={`p-4 border rounded-lg text-left transition-all ${
-                    assetMethod === 'csv' 
-                      ? 'border-cyan-500 bg-cyan-950/20' 
-                      : 'border-slate-800 bg-slate-900/30'
-                  }`}
-                >
-                  <FileText className="h-5 w-5 text-slate-400 mb-2" />
-                  <span className="block font-semibold text-white">Upload CSV File</span>
-                  <span className="block text-xs text-slate-400 mt-1">Import list from external threat engines.</span>
+                  <Plus className="h-5 w-5 text-cyan-400 mb-2" />
+                  <span className="block font-semibold text-white">Register Real Assets Now</span>
+                  <span className="block text-xs text-slate-400 mt-1">Enter hostnames and IP addresses of your critical nodes directly.</span>
                 </button>
               </div>
 
               {assetMethod === 'manual' && (
-                <div className="space-y-3 mt-4">
-                  <div className="text-sm font-semibold text-slate-300">Device List</div>
+                <div className="space-y-3 mt-4 border-t border-slate-800/80 pt-4">
+                  <div className="text-xs font-semibold text-slate-300">Initial Asset List:</div>
                   {manualAssets.map((asset, idx) => (
                     <div key={idx} className="flex gap-2 items-center">
                       <input
                         type="text"
-                        placeholder="Hostname"
+                        placeholder="Hostname (e.g. srv-core-01)"
                         value={asset.hostname}
                         onChange={(e) => updateManualAsset(idx, 'hostname', e.target.value)}
-                        className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-white"
+                        className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                       />
                       <select
                         value={asset.type}
                         onChange={(e) => updateManualAsset(idx, 'type', e.target.value)}
-                        className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white"
+                        className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white focus:outline-none"
                       >
                         <option value="SERVER">Server</option>
                         <option value="WORKSTATION">Workstation</option>
-                        <option value="CLOUD_INSTANCE">Cloud Instance</option>
+                        <option value="DATABASE">Database</option>
+                        <option value="NETWORK_DEVICE">Network Device</option>
                       </select>
                       <input
                         type="text"
-                        placeholder="IP Address"
+                        placeholder="IP (e.g. 10.0.1.10)"
                         value={asset.ipAddress}
                         onChange={(e) => updateManualAsset(idx, 'ipAddress', e.target.value)}
-                        className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-white"
+                        className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                       />
-                      <button 
-                        type="button" 
-                        onClick={() => removeManualAsset(idx)}
-                        className="text-red-400 hover:text-red-300 p-1"
+                      <select
+                        value={asset.criticality}
+                        onChange={(e) => updateManualAsset(idx, 'criticality', e.target.value)}
+                        className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white focus:outline-none"
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                        <option value="LOW">Low</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="HIGH">High</option>
+                        <option value="CRITICAL">Critical</option>
+                      </select>
+                      {manualAssets.length > 1 && (
+                        <button 
+                          type="button" 
+                          onClick={() => removeManualAsset(idx)}
+                          className="text-red-400 hover:text-red-300 p-1"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                   <button
@@ -393,128 +431,72 @@ export default function OnboardingWizard() {
                     onClick={addManualAsset}
                     className="text-xs text-cyan-400 flex items-center gap-1 hover:text-cyan-300 mt-2"
                   >
-                    <PlusCircle className="h-4 w-4" /> Add Asset row
+                    <PlusCircle className="h-4 w-4" /> Add another asset
                   </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* Step 4: Configure Alert Source */}
+          {/* Step 4: Telemetry & Ingestion Credential */}
           {step === 4 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2"><Radio className="text-cyan-400 animate-pulse" /> Step 4: Configure Alert Feeds</h3>
-                <p className="text-sm text-slate-400 mt-1">Establish ingestion streams for SOC threat detections</p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="border border-slate-800 rounded-lg p-4 bg-slate-950/40 flex items-start gap-4">
-                  <input
-                    type="radio"
-                    name="alertSource"
-                    id="src-demo"
-                    checked={alertSource === 'demo'}
-                    onChange={() => setAlertSource('demo')}
-                    className="mt-1"
-                  />
-                  <div>
-                    <label htmlFor="src-demo" className="font-bold text-white block">Defensive Incident Simulator (Demo Feed)</label>
-                    <span className="text-xs text-slate-400 block mt-1">Pre-seed 150 simulated alerts, including unusual auth logs, vulnerable servers, and command payloads.</span>
-                  </div>
-                </div>
-
-                <div className="border border-slate-800 rounded-lg p-4 bg-slate-950/40 flex items-start gap-4 opacity-75">
-                  <input
-                    type="radio"
-                    name="alertSource"
-                    id="src-webhook"
-                    checked={alertSource === 'webhook'}
-                    onChange={() => setAlertSource('webhook')}
-                    className="mt-1"
-                  />
-                  <div>
-                    <label htmlFor="src-webhook" className="font-bold text-white block">Generic Webhook Ingestion</label>
-                    <span className="text-xs text-slate-400 block mt-1">Triggers standard tokenized endpoints (`POST /api/v1/ingest/alerts`) for forwarding raw JSON logs.</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 5: Invite Team */}
-          {step === 5 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2"><Users className="text-cyan-400" /> Step 5: Invite SOC Analysts</h3>
-                <p className="text-sm text-slate-400 mt-1">Invite team members and assign operational permissions</p>
-              </div>
-
-              <div className="space-y-3">
-                {teamMembers.map((member, idx) => (
-                  <div key={idx} className="flex gap-2 items-center">
-                    <input
-                      type="email"
-                      placeholder="analyst@organization.com"
-                      value={member.email}
-                      onChange={(e) => updateTeamMember(idx, 'email', e.target.value)}
-                      className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white"
-                    />
-                    <select
-                      value={member.role}
-                      onChange={(e) => updateTeamMember(idx, 'role', e.target.value)}
-                      className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white"
-                    >
-                      <option value="SECURITY_ANALYST">Security Analyst</option>
-                      <option value="SOC_MANAGER">SOC Manager</option>
-                      <option value="COMPLIANCE_VIEWER">Compliance Viewer</option>
-                      <option value="EXECUTIVE_VIEWER">Executive Viewer</option>
-                    </select>
-                    <button 
-                      type="button" 
-                      onClick={() => removeTeamMember(idx)}
-                      className="text-red-400 hover:text-red-300 p-2"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-                
-                <button
-                  type="button"
-                  onClick={addTeamMember}
-                  className="text-xs text-cyan-400 flex items-center gap-1 hover:text-cyan-300 mt-2"
-                >
-                  <PlusCircle className="h-4 w-4" /> Invite another member
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 6: Confirmation */}
-          {step === 6 && (
-            <div className="space-y-6 text-center py-6">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-cyan-950/40 border border-cyan-800/40 text-cyan-400 mb-4">
-                <CheckCircle2 className="h-10 w-10" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white">Your SOC Workspace is Ready</h3>
-                <p className="text-sm text-slate-400 mt-2 max-w-md mx-auto">
-                  We have mapped your assets catalog and alert integration endpoints. Let's redirect you to the main Security Operations Command Center.
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Terminal className="text-cyan-400" /> Step 4: Ingestion Credential & Launch
+                </h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  Your tenant ingestion credential has been provisioned. Send telemetry directly to trigger detection rules.
                 </p>
               </div>
 
-              <div className="bg-slate-950/60 p-4 rounded-lg border border-slate-850 text-left font-mono text-xs max-w-md mx-auto space-y-1">
-                <div>Tenant: <span className="text-white">{profile.name}</span></div>
-                <div>Industry: <span className="text-white">{profile.industry}</span></div>
-                <div>Seed Detections: <span className="text-white">{alertSource === 'demo' ? 'Yes (150 alerts)' : 'Webhook config only'}</span></div>
-                <div>Seeded Assets: <span className="text-white">{assetMethod === 'demo' ? 'Yes (50 endpoints)' : 'Manual config'}</span></div>
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800 space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400 font-medium">Tenant Ingestion Token:</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(credentialToken)}
+                      className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copied ? 'Copied' : 'Copy Token'}
+                    </button>
+                  </div>
+                  <div className="font-mono text-xs text-cyan-300 bg-slate-900/90 p-2.5 rounded border border-slate-800/80 break-all select-all">
+                    {credentialToken || 'Generating live credential token...'}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span>Example Ingestion Command (cURL):</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(curlCommand)}
+                      className="text-cyan-400 hover:text-cyan-300 text-xs flex items-center gap-1 font-normal"
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      Copy cURL
+                    </button>
+                  </label>
+                  <pre className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap">
+                    {curlCommand}
+                  </pre>
+                </div>
+
+                <div className="p-3 bg-cyan-950/20 border border-cyan-800/30 rounded-lg text-xs text-cyan-300 flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>
+                    When telemetry is received, ThreatSync OS will normalize the event, match detection rules, correlate incidents, and dynamically recalculate asset risk scores.
+                  </span>
+                </div>
               </div>
             </div>
           )}
 
           {/* Bottom Actions Bar */}
-          <div className="flex justify-between items-center border-t border-slate-850 pt-6 mt-8">
+          <div className="flex justify-between items-center border-t border-slate-800 pt-6 mt-8">
             <button
               type="button"
               onClick={handleBack}
@@ -532,8 +514,8 @@ export default function OnboardingWizard() {
             >
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-              ) : step === 6 ? (
-                <>Complete Setup <CheckCircle2 className="h-4 w-4" /></>
+              ) : step === 4 ? (
+                <>Launch SOC Workspace <CheckCircle2 className="h-4 w-4" /></>
               ) : (
                 <>Next Step <ArrowRight className="h-4 w-4" /></>
               )}
@@ -545,7 +527,7 @@ export default function OnboardingWizard() {
 
       {/* Bottom Footer */}
       <footer className="border-t border-slate-900 bg-[#030712] py-4 text-center text-xs text-slate-600">
-        &copy; {new Date().getFullYear()} ThreatSync OS. Secure onboarding session.
+        &copy; {new Date().getFullYear()} ThreatSync OS. Secure operational workspace onboarding.
       </footer>
     </div>
   );

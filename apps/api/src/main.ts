@@ -15,9 +15,15 @@ import { AppModule } from './app.module.js';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from './common/http-exception.filter.js';
+import { rateLimitMiddleware } from './common/rate-limit.middleware.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  if (process.env.NODE_ENV === 'production') {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
+  app.use(rateLimitMiddleware);
 
   // Configure CORS to authorize Next.js client with credentials
   app.enableCors({

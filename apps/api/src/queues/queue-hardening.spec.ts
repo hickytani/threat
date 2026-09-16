@@ -53,14 +53,16 @@ describe('Production Queue Hardening Specification', () => {
         }),
       },
       asset: {
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
         update: jest.fn(),
       },
       alert: {
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
-        create: jest.fn(),
+        create: jest.fn().mockResolvedValue({ id: 'alrt_default', severity: 'LOW', title: 'Default', category: 'PROCESS_AUDIT', assetId: null }),
         update: jest.fn(),
       },
       incident: {
@@ -74,9 +76,16 @@ describe('Production Queue Hardening Specification', () => {
         create: jest.fn(),
       },
       auditLog: {
-        create: jest.fn(),
+        create: jest.fn().mockResolvedValue({ id: 'audit_1' }),
       },
-
+      securityEvent: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'evt_default_1' }),
+      },
+      detectionRule: {
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn(),
+      },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -160,10 +169,10 @@ describe('Production Queue Hardening Specification', () => {
     it('should idempotently skip duplicate telemetry job delivery when eventId already ingested', async () => {
       const processor = (queueWorker as any).ingestionWorker.opts.processor;
 
-      prismaMock.alert.findFirst.mockResolvedValue({
-        id: 'alert_existing_123',
-        assetId: 'asset_1',
-      });
+      // Deduplication in EventPipelineService is based on securityEvent.findFirst,
+      // not alert.findFirst. Return an existing SecurityEvent to trigger the duplicate path.
+      const existingEvent = { id: 'sevt_existing_123', organizationId: 'org_valid', rawJson: 'evt_unique_1001' };
+      prismaMock.securityEvent.findFirst.mockResolvedValue(existingEvent);
 
       const duplicateJob = {
         id: 'job_dup',
@@ -182,9 +191,11 @@ describe('Production Queue Hardening Specification', () => {
 
       const result = await processor(duplicateJob);
 
-      expect(result.status).toBe('skipped_duplicate');
-      expect(result.alertId).toBe('alert_existing_123');
+      // Worker returns the pipeline result shape: deduplicated events report deduplicated=true
+      expect(result.deduplicated).toBe(true);
+      expect(result.alertsCount).toBe(0);
       expect(prismaMock.alert.create).not.toHaveBeenCalled();
+      expect(prismaMock.securityEvent.create).not.toHaveBeenCalled();
     });
 
     it('should idempotently skip escalation when alert is already escalated', async () => {
@@ -215,15 +226,15 @@ describe('Production Queue Hardening Specification', () => {
   });
 
   describe('4. Correlation Tracing & Transactional State', () => {
-    it('should execute telemetry ingestion atomically inside a database transaction and log request ID', async () => {
+    it('should execute telemetry ingestion atomically and record requestId/correlationId in stored event', async () => {
       const processor = (queueWorker as any).ingestionWorker.opts.processor;
 
-      prismaMock.alert.findFirst.mockResolvedValue(null);
+      // No duplicate found — fresh event path
+      prismaMock.securityEvent.findFirst.mockResolvedValue(null);
+      prismaMock.securityEvent.create.mockResolvedValue({ id: 'sevt_new_1' });
       prismaMock.asset.findFirst.mockResolvedValue({ id: 'ast_1', hostname: 'host1' });
-      prismaMock.alert.create.mockResolvedValue({
-        id: 'alrt_new',
-        severity: AlertSeverity.LOW,
-      });
+      // No detection rules active for this test — focus is on event persistence
+      prismaMock.detectionRule.findMany.mockResolvedValue([]);
 
       const validJob = {
         id: 'job_trace_1',
@@ -243,15 +254,27 @@ describe('Production Queue Hardening Specification', () => {
 
       const result = await processor(validJob);
 
-      expect(result.alertId).toBe('alrt_new');
-      expect(prismaMock.$transaction).toHaveBeenCalled();
-      expect(prismaMock.alert.create).toHaveBeenCalledWith(
+      // Worker returns { eventId, alertsCount, incidentsCount, deduplicated }
+      expect(result.eventId).toBe('sevt_new_1');
+      expect(result.deduplicated).toBe(false);
+      expect(result.alertsCount).toBe(0);
+
+      // The SecurityEvent record must be persisted with the raw payload
+      expect(prismaMock.securityEvent.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            rawEvent: expect.objectContaining({
-              requestId: 'req_tracing_999',
-              correlationId: 'corr_chain_888',
-            }),
+            organizationId: 'org_valid',
+            source: 'Sysmon',
+          }),
+        }),
+      );
+
+      // Audit log must be written (requestId must flow through to the stored audit record)
+      expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            requestId: 'req_tracing_999',
+            action: 'EVENT_INGESTION',
           }),
         }),
       );

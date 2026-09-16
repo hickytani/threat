@@ -10,7 +10,7 @@ import type {
   TimelineItem,
 } from 'shared-types';
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010/api/v1';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 export class ApiClientError extends Error {
   status: number;
@@ -194,5 +194,22 @@ export async function getSystemHealth() {
     dependencies?: Record<string, string>;
     timestamp: string;
   }>('/health/dependencies');
+}
+
+export async function getIngestionCredentials() {
+  return apiRequest<any[]>('/organizations/current/ingestion-credentials');
+}
+
+export async function createIngestionCredential(name: string, expiresAt?: string) {
+  return apiRequest<any>('/organizations/current/ingestion-credentials', {
+    method: 'POST',
+    body: JSON.stringify({ name, expiresAt }),
+  });
+}
+
+export async function revokeIngestionCredential(id: string) {
+  return apiRequest<any>(`/organizations/current/ingestion-credentials/${id}`, {
+    method: 'DELETE',
+  });
 }
 

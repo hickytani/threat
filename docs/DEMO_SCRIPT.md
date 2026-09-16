@@ -1,59 +1,48 @@
-# ThreatSync OS — 60-90 Second Walkthrough Script
+# ThreatSync OS — 60-90 Second Demo Script
 
-This script is designed for recording a concise, natural, and technical demonstration video of ThreatSync OS. Speak in a clear, measured engineer-to-engineer tone.
-
----
-
-### [0:00 - 0:10] Introduction & Core Value
-> **Visual**: Landing page / SOC Overview (`/dashboard`)
->
-> **Script**:
-> *"ThreatSync OS is a full-stack security operations and incident investigation platform. It normalizes security telemetry, evaluates deterministic detection rules, correlates alerts into evidence-backed incidents, and maintains full tenant isolation and audit logging."*
+This is a concise, hiring-manager-friendly walkthrough for demonstrating the project without overstating its maturity or claiming production deployment.
 
 ---
 
-### [0:10 - 0:25] SOC Overview & Pipeline Flow
-> **Visual**: Click on `/dashboard` Overview widgets and pipeline cards.
+### [0:00 - 0:15] Intro and framing
+> **Visual**: Landing page / dashboard overview
 >
 > **Script**:
-> *"On the Overview dashboard, analysts get a database-backed summary of active security alerts, open incidents, and high-risk assets. Security events move through a multi-stage pipeline: normalization, deduplication, detection evaluation, and correlation."*
+> *"This is ThreatSync OS, a local portfolio project that models a SOC investigation workflow. It demonstrates how a security platform could ingest events, evaluate rules, correlate alerts, and maintain auditable investigation records in a structured backend."*
 
 ---
 
-### [0:25 - 0:40] Primary Alert & Detection Evidence
-> **Visual**: Navigate to `/dashboard/alerts` and click on the primary critical alert (`Suspicious Credential Dumping via LSASS Access`).
+### [0:15 - 0:35] Event flow and detection
+> **Visual**: Open the dashboard and show alert/event data
 >
 > **Script**:
-> *"Opening this critical alert, we can see the exact evidence that triggered it: raw security event IDs, process parameters, user context, and the deterministic rule logic that fired. There are no fabricated metrics—alerts map directly to explicit telemetry."*
+> *"The project ingests telemetry into a normalized event model, checks for duplicates, and evaluates explicit detection rules against event attributes. In other words, the alerting logic is deterministic and explainable instead of being a black box."*
 
 ---
 
-### [0:40 - 0:55] Incident & Correlation Timeline
-> **Visual**: Click on the linked Incident link (`INC-2026-001` or `/dashboard/incidents/[id]`).
+### [0:35 - 0:55] Correlation and incident workflow
+> **Visual**: Open an alert and pivot into the incident or asset view
 >
 > **Script**:
-> *"From the alert, we pivot directly into the correlated Incident console. The system automatically linked multiple alerts based on shared identity, network indicators, and temporal proximity, presenting a unified, chronological investigation timeline."*
+> *"Once alerts are created, the system correlates related events into a broader incident narrative using shared context like asset, identity, network indicators, and timeline proximity. The analyst console then shows how that evidence is grouped into a single investigation flow."*
 
 ---
 
-### [0:55 - 1:10] Asset Risk Contributors
-> **Visual**: Click on the affected Asset (`DB-PROD-01` or `/dashboard/assets/[id]`).
+### [0:55 - 1:15] Risk and auditability
+> **Visual**: Show asset risk score and audit trail
 >
 > **Script**:
-> *"Pivoting to the affected asset, ThreatSync exposes an explainable risk score out of 100. Rather than presenting an opaque magic number, the UI breaks down exact risk contributors: base business criticality, active alert severity, and open CVE vulnerability weightings."*
+> *"On the asset side, risk is not just a single opaque number. The app breaks down contributors so an analyst can see why an asset is elevated. And every status update is recorded in an audit log so investigation changes remain traceable and backend-authoritative."*
 
 ---
 
-### [1:10 - 1:20] IOC & Intelligence Provider Abstraction
-> **Visual**: Click on the related IOC IP/Hash (`/dashboard/ioc/[id]`).
+### [1:15 - 1:30] Local intelligence clarification
+> **Visual**: Highlight the local threat-intelligence context or provider abstraction
 >
 > **Script**:
-> *"Inspecting this IP indicator, threat intelligence lookups are abstracted behind a clean provider interface. Here, the system indicates data was enriched using our local deterministic provider fallback, distinguishing offline rules from external REST APIs."*
+> *"A key detail is that the default intelligence path is local and deterministic for the demo. External providers can be configured separately when a runtime environment provides those credentials, but this project does not assume live SIEM or EDR feeds or a production deployment."*
 
 ---
 
-### [1:20 - 1:30] Response State Transition & Audit Trail
-> **Visual**: Change Incident status to `IN_PROGRESS` or `RESOLVED`, then navigate to `/dashboard/audit`.
->
-> **Script**:
-> *"Finally, when an analyst transitions an incident state, the action is authoritatively processed backend-side and recorded in an immutable audit trail, providing complete compliance and forensic traceability across the organization."*
+### Short closing line
+> *"So the value here is not pretending to run a live SOC. It is showing strong engineering fundamentals across backend security, async processing, event-driven logic, and investigation workflows in a portfolio-friendly implementation."*

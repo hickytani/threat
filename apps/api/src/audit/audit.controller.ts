@@ -5,7 +5,7 @@ import { TenantGuard } from '../auth/tenant.guard.js';
 import { CurrentMember } from '../auth/current-member.decorator.js';
 import { ActiveMember } from '../auth/auth.interface.js';
 
-@Controller('audit-logs')
+@Controller(['audit-logs', 'audit'])
 @UseGuards(JwtAuthGuard, TenantGuard)
 export class AuditController {
   constructor(private auditService: AuditService) {}

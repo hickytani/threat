@@ -18,6 +18,8 @@ type DashboardSummary = {
   monitoredAssets: number;
   averageAssetRisk: number;
   atRiskAssets: number;
+  eventsReceived: number;
+  lastEventAt: string | null;
 };
 
 const defaultSummary: DashboardSummary = {
@@ -27,6 +29,8 @@ const defaultSummary: DashboardSummary = {
   monitoredAssets: 0,
   averageAssetRisk: 0,
   atRiskAssets: 0,
+  eventsReceived: 0,
+  lastEventAt: null,
 };
 
 const toneStyles: Record<string, string> = {
@@ -40,6 +44,7 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary>(defaultSummary);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const loadSummary = async () => {
     try {
@@ -47,11 +52,12 @@ export default function DashboardPage() {
       const data = await apiRequest<DashboardSummary>('/dashboard/summary');
       setSummary(data);
       setError(null);
+      setLastUpdated(new Date());
     } catch (err) {
       const message =
         err instanceof Error
           ? err.message
-          : 'Unable to reach the ThreatSync API. Confirm the Python backend is running.';
+          : 'Unable to reach the ThreatSync API. Confirm the NestJS API backend is running on port 3001.';
 
       setError(message);
       setSummary(defaultSummary);
@@ -62,6 +68,19 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadSummary();
+
+    const refreshWhenVisible = () => {
+      if (!document.hidden) {
+        loadSummary();
+      }
+    };
+    const interval = window.setInterval(refreshWhenVisible, 30_000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, []);
 
   const dashboardStats = useMemo(
@@ -122,6 +141,12 @@ export default function DashboardPage() {
         </div>
       )}
 
+      <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">
+        <span>{lastUpdated ? `Last updated ${lastUpdated.toLocaleTimeString()}` : 'Waiting for workspace data'}</span>
+        <span className="text-slate-700">|</span>
+        <span>{summary.eventsReceived} events received</span>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {dashboardStats.map(({ label, value, helper, icon: Icon, tone }) => (
           <div key={label} className="rounded-xl border border-slate-800/80 bg-[#091827]/80 p-5 shadow-[inset_0_1px_0_rgba(148,163,184,0.05)]">
@@ -155,6 +180,8 @@ export default function DashboardPage() {
             <p className="mt-3 max-w-2xl text-[15px] leading-7 text-slate-200">
               {loading
                 ? 'Loading the live SOC telemetry stream...'
+                : summary.eventsReceived === 0
+                  ? 'No telemetry received yet. Connect an ingestion source to start monitoring this workspace.'
                 : `The current tenant is reporting ${summary.totalAlerts} detections, ${summary.openIncidents} active incidents, and ${summary.atRiskAssets} assets above risk threshold.`}
             </p>
           </div>
@@ -177,6 +204,8 @@ export default function DashboardPage() {
             <p className="mt-2 max-w-sm text-sm text-slate-400">
               {loading
                 ? 'Retrieving latest asset telemetry from the control plane.'
+                : summary.eventsReceived === 0
+                  ? 'Your organization is ready for its first asset or telemetry source.'
                 : `${summary.atRiskAssets} assets are currently above the configured risk threshold.`}
             </p>
           </div>

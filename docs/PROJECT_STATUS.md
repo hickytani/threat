@@ -1,7 +1,7 @@
 # Project Status — ThreatSync OS
 
 ## Project Metadata
-- **Current Phase:** Phase 1 — Foundation (Completed)
+- **Current Phase:** Phase 2 — Productionization (In progress)
 - **AI Engine Fallback:** Enabled (Mock fallback active)
 - **Database Fallback:** Supported (SQLite dev.db active)
 - **Redis Queue Fallback:** Supported (In-Memory fallback active)
@@ -13,6 +13,9 @@
 - **Custom Authentication Module:** Cookie-based HTTP-Only sessions, bcryptjs password hashes, dynamic token rotation, and database session tracking.
 - **Tenant Security Guard:** Dynamic `TenantGuard` verifying active organizational membership. Passed verification tests.
 - **Public & Onboarding Forms:** Polished landing page, interactive login/register forms, and multi-step Onboarding Setup Wizard with seeder triggers.
+- **Machine Ingestion Credentials:** Organization-scoped, hashed, revocable credentials with authenticated event ingestion.
+- **Operational Dashboard:** Tenant-scoped metrics with foreground polling and explicit empty-workspace states.
+- **Deployment Boundaries:** Production validation rejects missing Redis and unsafe demo-seed configuration.
 
 ## Current Phase Roadmap (Phase 2 — Productionization)
 - [x] Harden environment validation and runtime config resilience
@@ -20,10 +23,12 @@
 - [x] Extend event pipeline detection suppression and rule state tracking
 - [x] Expand API contract and documentation coverage
 - [ ] Complete end-to-end build/test verification for deployment artifacts and release notes
+- [ ] Add production SSO/MFA, distributed rate limiting, connector operations, and separate worker bootstrap
 
 ## Known Issues
 - Production deployment still assumes a PostgreSQL-backed runtime with optional Redis, but local development continues to use in-memory fallback behavior.
-- The frontend remains mostly static dashboard flows, with no live SSE/WebSocket streaming yet.
+- The frontend uses 30-second foreground polling; SSE/WebSocket streaming is not active.
+- The current worker is initialized with the API process; a separate worker entrypoint is still needed for independent deployment.
 
 ## Technical Debt
 - The current queue setup uses in-memory mocks for local development and should remain explicit about fallback expectations in release documentation.

@@ -1,8 +1,9 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger, Optional } from '@nestjs/common';
 import { Worker, Job, UnrecoverableError } from 'bullmq';
 import { PrismaService } from '../common/prisma.service.js';
 import { QueueService } from './queue.service.js';
 import { CorrelationService } from './correlation.service.js';
+import { EventPipelineService, IngestEventInput } from '../events/event-pipeline.service.js';
 import { AlertStatus, AlertSeverity, IncidentStatus, AssetType, AssetCriticality, Environment } from '@prisma/client';
 import MockRedis from 'ioredis-mock';
 import Redis from 'ioredis';
@@ -13,12 +14,16 @@ export class QueueWorker implements OnModuleInit, OnModuleDestroy {
   private ingestionWorker!: Worker;
   private escalationWorker!: Worker;
   private connection: any;
+  private eventPipeline: EventPipelineService;
 
   constructor(
     private prisma: PrismaService,
     private queueService: QueueService,
     private correlationService: CorrelationService,
-  ) {}
+    @Optional() eventPipeline?: EventPipelineService,
+  ) {
+    this.eventPipeline = eventPipeline || new EventPipelineService(prisma, correlationService);
+  }
 
   async onModuleInit() {
     const redisUrl = process.env.REDIS_URL;
@@ -56,95 +61,60 @@ export class QueueWorker implements OnModuleInit, OnModuleDestroy {
           throw new UnrecoverableError(`Tenant with ID ${organizationId} does not exist.`);
         }
 
-        // Idempotency Check: check if identical alert/event already processed
         const eventId = rawEvent?.eventId || idempotencyKey;
-        if (eventId) {
-          const existingAlert = await this.prisma.alert.findFirst({
-            where: {
-              organizationId,
-              rawEvent: {
-                path: ['eventId'],
-                equals: eventId,
-              },
-            },
-          });
-          if (existingAlert) {
-            this.logger.log(`${logPrefix} Duplicate job delivery detected for event ${eventId}. Idempotently skipping alert creation.`);
-            return { alertId: existingAlert.id, assetId: existingAlert.assetId, correlated: false, status: 'skipped_duplicate' };
-          }
-        }
+        const input: IngestEventInput = {
+          eventType: category || rawEvent?.eventType || 'ENDPOINT_ANOMALY',
+          source: source || 'TelemetryIngest',
+          action: rawEvent?.action || 'PROCESS_AUDIT',
+          outcome: rawEvent?.outcome || 'UNKNOWN',
+          severity: severity || 'LOW',
+          message: title || description || 'Telemetry Event',
+          hostname: hostname || rawEvent?.hostname,
+          metadata: {
+            ...rawEvent?.metadata,
+            ipAddress,
+            sourceIp: ipAddress,
+            idempotencyKey: idempotencyKey || eventId,
+          },
+          rawEvent: rawEvent || {
+            title,
+            description,
+            category,
+            source,
+            hostname,
+            ipAddress,
+          },
+        };
 
-        // Perform Asset resolution, Alert creation, and Asset risk update atomically
-        const result = await this.prisma.$transaction(async (tx) => {
-          let asset = await tx.asset.findFirst({
-            where: { hostname, organizationId },
-          });
-
-          if (!asset) {
-            asset = await tx.asset.create({
-              data: {
-                organizationId,
-                hostname,
-                displayName: hostname,
-                type: AssetType.SERVER,
-                ipAddress,
-                businessCriticality: AssetCriticality.MEDIUM,
-                environment: Environment.DEV,
-                isInternetFacing: false,
-                monitoringStatus: 'ACTIVE',
-                riskScore: 35.0,
-                tags: ['AutoIngested'] as any,
-              },
-            });
-          }
-
-          const alert = await tx.alert.create({
-            data: {
-              organizationId,
-              title,
-              description,
-              severity: severity as AlertSeverity,
-              status: AlertStatus.NEW,
-              category,
-              source,
-              assetId: asset.id,
-              ipAddress,
-              confidenceScore: 90.0,
-              rawEvent: {
-                ...rawEvent,
-                eventId: eventId || `job_${job.id}`,
-                requestId,
-                correlationId,
-              } as any,
-              tags: ['IngestedQueue'] as any,
-            },
-          });
-
-          await tx.asset.update({
-            where: { id: asset.id },
-            data: { activeAlertCount: { increment: 1 } },
-          });
-
-          return { alert, asset };
+        const result = await this.eventPipeline.processEvent({
+          organizationId,
+          input,
+          actor: { fullName: 'Background Telemetry Worker' },
+          context: { requestId, correlationId, idempotencyKey: idempotencyKey || eventId },
         });
 
-        // Run correlation engine rules
-        const correlatedIncident = await this.correlationService.correlateAlert(result.alert);
-
-        // Automated Escalation trigger fallback: If severity is CRITICAL and not correlated, trigger standard escalation
-        if (!correlatedIncident && result.alert.severity === AlertSeverity.CRITICAL) {
-          this.logger.log(`${logPrefix} Critical Alert detected, pushing to escalation queue: alertId=${result.alert.id}`);
-          await this.queueService.addEscalationJob({
-            alertId: result.alert.id,
-            userId: 'system',
-            fullName: 'Automation Orchestrator',
-            organizationId,
-            requestId,
-            correlationId,
-          });
+        // If any created alert is CRITICAL and was not correlated into an incident, trigger standard escalation job
+        for (const alert of result.alertsCreated) {
+          const isCorrelated = result.incidentsCreated.length > 0;
+          if (!isCorrelated && alert.severity === AlertSeverity.CRITICAL) {
+            this.logger.log(`${logPrefix} Critical Alert detected without incident correlation, queuing escalation: alertId=${alert.id}`);
+            await this.queueService.addEscalationJob({
+              alertId: alert.id,
+              userId: 'system',
+              fullName: 'Automation Orchestrator',
+              organizationId,
+              requestId,
+              correlationId,
+            });
+          }
         }
 
-        return { alertId: result.alert.id, assetId: result.asset.id, correlated: !!correlatedIncident };
+        return {
+          eventId: result.storedEvent?.id,
+          alertsCount: result.alertsCreated.length,
+          incidentsCount: result.incidentsCreated.length,
+          deduplicated: result.deduplicated,
+        };
       },
       { connection: this.connection, concurrency: 5 },
     );

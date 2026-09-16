@@ -16,9 +16,9 @@ interface MetricItem {
 }
 
 const METRICS: MetricItem[] = [
-  { label: 'Event Ingestion Rate', value: 50000, suffix: ' eps', desc: 'Sustained throughput per cluster node', icon: Zap, color: 'cyan' },
-  { label: 'Deduplication Speed', value: 1.2, suffix: ' ms', desc: 'Redis hash fingerprint evaluation', icon: Cpu, color: 'indigo' },
-  { label: 'Rule Correlation Accuracy', value: 99.9, suffix: '%', desc: 'Deterministic threat vector mapping', icon: Shield, color: 'emerald' },
+  { label: 'Pipeline Processing Target', value: 15, suffix: ' ms', desc: 'End-to-end normalization and rule evaluation', icon: Zap, color: 'cyan' },
+  { label: 'Deduplication Window', value: 300, suffix: ' s', desc: 'Sliding-window duplicate suppression threshold', icon: Cpu, color: 'indigo' },
+  { label: 'Detection Rule Fidelity', value: 100, suffix: '%', desc: 'Deterministic condition matching engine', icon: Shield, color: 'emerald' },
   { label: 'Audit Trail Retention', value: 100, suffix: '%', desc: 'Immutable server-side audit logs', icon: Lock, color: 'amber' },
 ];
 

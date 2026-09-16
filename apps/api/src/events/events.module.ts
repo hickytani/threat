@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
 import { EventsService } from './events.service.js';
 import { EventsController } from './events.controller.js';
+import { IngestionModule } from '../ingestion/ingestion.module.js';
+import { EventPipelineService } from './event-pipeline.service.js';
 
 @Module({
+  imports: [IngestionModule],
   controllers: [EventsController],
-  providers: [EventsService],
-  exports: [EventsService],
+  providers: [EventsService, EventPipelineService],
+  exports: [EventsService, EventPipelineService],
 })
 export class EventsModule {}
+

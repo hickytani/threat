@@ -1,262 +1,190 @@
 # ThreatSync OS
 
-**Full-stack security operations and investigation platform** — event ingestion, deterministic detection, evidence-backed alert correlation, explainable risk scoring, incident investigation, and auditable response.
+ThreatSync OS is a portfolio-quality security operations and investigation platform demo built with Next.js, NestJS, Prisma, and Redis/BullMQ.
 
-> **This is an engineering portfolio project.** It demonstrates a realistic SOC backend architecture with a full analyst investigation console. It is not connected to live SIEM/EDR infrastructure.
+> This project is a local implementation for technical demonstration and portfolio review. It is not connected to live SIEM/EDR telemetry, does not claim production deployment, and does not perform autonomous external security response.
 
-[![Tests](https://img.shields.io/badge/tests-76%20passing-brightgreen)](#tests) [![Stack](https://img.shields.io/badge/stack-Next.js%20%7C%20NestJS%20%7C%20Prisma%20%7C%20BullMQ-0ea5e9)](#tech-stack) [![License](https://img.shields.io/badge/license-MIT-slate)](LICENSE)
-
----
-
-## What is ThreatSync OS?
-
-ThreatSync OS models the core data flows and investigation workflows of a Security Operations Center platform:
-
-- **Ingest** security events from endpoints, auth providers, and cloud services
-- **Detect** threat patterns against configurable detection rules
-- **Correlate** alerts into evidence-backed incident files
-- **Score** asset risk with an explainable contributor breakdown
-- **Investigate** across the full entity graph: Event → Alert → Incident → Asset → IOC → Audit
-- **Respond** via analyst-controlled state transitions that generate audit records
+[![Tests](https://img.shields.io/badge/tests-76%20passing-brightgreen)](#verification) [![Stack](https://img.shields.io/badge/stack-Next.js%20%7C%20NestJS%20%7C%20Prisma%20%7C%20BullMQ-0ea5e9)](#tech-stack) [![License](https://img.shields.io/badge/license-MIT-slate)](LICENSE)
 
 ---
 
-## System at a Glance
+## What this project demonstrates
 
-### Detection & Investigation Pipeline
+ThreatSync OS models the core workflows of a SOC investigation workflow in a local, deterministic environment:
+
+- Event ingestion and schema normalization
+- Duplicate detection and rule-based alert generation
+- Alert-to-incident correlation using shared context
+- Explainable asset risk scoring
+- Tenant-aware authorization and audit logging
+- Async queue processing with BullMQ + Redis
+
+This is not a live production SOC environment. It is a realistic engineering project that demonstrates how these systems are structured and validated in a controlled local demo.
+
+---
+
+## Architecture at a glance
+
+### Data flow
 
 ```mermaid
 graph TD
-    SE[Security Event] --> NRM[Normalization]
-    NRM --> DUP{Duplicate?}
-    DUP -->|Yes| SKIP[Return existing event]
-    DUP -->|No| STORE[Store Event]
-    STORE --> DET[Detection Rule Evaluation]
-    DET -->|Match| ALR[Alert Created]
-    DET -->|No match| END[End]
-    ALR --> RSK[Asset Risk Updated]
-    ALR --> COR[Correlation Engine]
-    COR --> INC[Incident Created or Updated]
-    INC --> INV[SOC Investigation Console]
-    INV --> TRN[State Transition]
-    TRN --> AUD[Audit Log Entry]
+    A[Security Event] --> B[Normalization]
+    B --> C[Duplicate Check]
+    C --> D[Rule Evaluation]
+    D --> E[Alert Creation]
+    E --> F[Asset Risk Update]
+    E --> G[Correlation Engine]
+    G --> H[Incident Creation / Update]
+    H --> I[Analyst Investigation Console]
+    I --> J[State Transition]
+    J --> K[Audit Log]
 ```
 
-### Synchronous vs Asynchronous Paths
+### Async processing path
 
 ```mermaid
 graph LR
-    subgraph "Synchronous (POST /events/ingest)"
-        A[Event API] --> B[Normalize] --> C[Deduplicate] --> D[Detect] --> E[Correlate]
-    end
-    subgraph "Asynchronous (POST /events/ingest?async=true)"
-        F[Event API] --> G[BullMQ Queue]
-        G --> H[(Redis)]
-        H --> I[Queue Worker]
-        I --> J[Detect] --> K[Correlate]
-    end
+    A[REST API] --> B[BullMQ Queue]
+    B --> C[(Redis)]
+    C --> D[Queue Worker]
+    D --> E[Rule evaluation + correlation]
+    E --> F[DB updates + audit log]
 ```
 
-### Full Stack Layers
+### Stack layers
 
-```
-Next.js App Router (SOC Console)
-         │
-  Typed API Client (api-client.ts)
-         │
-  NestJS REST Controllers
-         │
-  JwtAuthGuard + TenantGuard
-         │
-  Domain Services (Request-Scoped)
-         │
-  TenantScopedRepository
-         │
-  Prisma ORM → PostgreSQL / SQLite
+```text
+Next.js App Router (dashboard / investigation UI)
+        |
+   Typed API client
+        |
+  NestJS REST API + guards + middleware
+        |
+  Domain services and request-scoped authorization
+        |
+  Prisma ORM + PostgreSQL / local SQLite-backed demo data
 ```
 
 ---
 
-## What Makes This Engineering-Interesting
+## What is implemented and what is not
 
-### 1. Deterministic Detection, Not Random Demo Data
+### Implemented in this repo
 
-Alerts are generated by evaluating normalized event attributes against stored `DetectionRule` records.  
-The rule evaluator checks `matchConditions` (category, outcome, process name, attempt thresholds, IOC match flags).  
-No alert is fabricated. If a rule doesn't match, no alert is created.  
-→ [`events.service.ts`](apps/api/src/events/events.service.ts) — `runDetections()`, `matchRule()`, `matchesExplicitConditions()`
+- Deterministic event normalization and duplicate suppression
+- Rule-driven alert generation against explicit conditions
+- Asset risk scoring with per-factor contributors
+- Alert-to-incident correlation logic
+- Incident lifecycle transitions with audit records
+- JWT + tenant-bound authorization checks
+- BullMQ queue processing with Redis-backed execution when configured
 
-### 2. Explainable Risk Scoring
+### Not claimed here
 
-Asset risk is not an opaque number. The `buildRiskSummary()` method returns a `contributors` array, each with `label`, `score`, and `reason`.  
-Contributors: business criticality weight + active alert severity sum + CVSS-based vulnerability score + linked incident count.  
-→ [`assets.service.ts`](apps/api/src/assets/assets.service.ts) — `buildRiskSummary()`
+- Live SIEM ingestion from external enterprise infrastructure
+- Live EDR telemetry streams
+- Autonomous AI-driven decision making
+- Production deployment or managed cloud rollout
 
+---
+
+## Local threat intelligence vs external provider configuration
+
+ThreatSync OS distinguishes between two intelligence paths clearly:
+
+1. Local deterministic intelligence
+   - Default behavior in the demo environment
+   - Uses repository-backed or seeded local data for investigation and IOC matching
+   - Suitable for demos, deterministic testing, and portfolio validation
+
+2. External configured provider path
+   - Intended for an environment where provider credentials/config are supplied externally
+   - Not required for the base project to run locally
+   - The code abstracts the provider boundary and preserves the default local path
+
+This distinction is explicit in the investigation logic and should be described as such during portfolio presentations.
+
+---
+
+## Why this is a strong engineering portfolio project
+
+### 1. Security-by-structure, not just visual polish
+
+The project enforces tenant-aware access patterns and service-layer validation rather than making the UI look secure without backend enforcement.
+
+### 2. Deterministic behaviors are easier to explain
+
+Rules fire only when explicit conditions match. The project favors clear data flow and explainable logic over opaque analytics.
+
+### 3. Real engineering trade-offs are visible
+
+The project includes queue decoupling, Redis boundary enforcement, idempotency checks, and audit logging — all common concerns in real SOC systems without over-claiming production maturity.
+
+### 4. The demo remains grounded in evidence
+
+The dashboard and API are designed around the actual system data model and seeded local scenario, not an imagined enterprise environment.
+
+---
+
+## Verification
+
+The project has been validated in the local environment with the following evidence:
+
+- 7 test suites passed
+- 76 tests passed
+- API build succeeded
+- Web build succeeded
+- Redis-backed async queue path accepted and processed a live job with a real `jobId`
+
+See the related implementation in [apps/api/src/queues/queue.service.ts](apps/api/src/queues/queue.service.ts), [apps/api/src/queues/queue.worker.ts](apps/api/src/queues/queue.worker.ts), and [apps/api/src/intelligence/threat-intel.provider.ts](apps/api/src/intelligence/threat-intel.provider.ts).
+
+---
+
+## Quick start
+
+```bash
+npm install
+npm run db:push
+npm run db:seed
+npm run dev --workspace=apps/web
+npm run dev --workspace=apps/api
 ```
-Risk = criticalityWeight
-     + Σ(alertSeverityWeights)
-     + Σ(cvssScore × 1.6 per open CVE)
-     + incidentCount × 8
+
+Demo login credentials seeded in the local environment:
+
+- Email: `analyst@threatsync.local`
+- Password: `ThreatSyncSecured2026!`
+
+---
+
+## Project structure
+
+```text
+threat/
+├── apps/
+│   ├── api/
+│   └── web/
+├── packages/
+│   ├── database/
+│   └── shared-types/
+├── docs/
+├── README.md
+├── netlify.toml
+├── package.json
+└── tsconfig.json
 ```
 
-### 3. Tenant Isolation Enforced at Repository Layer
-
-Every service extends `TenantScopedRepository`. The `organizationId` getter resolves from the verified JWT member context — not from any client-supplied parameter. Database queries unconditionally append `organizationId: this.organizationId`.  
-If tenant context is missing, the getter throws before any query executes.  
-→ [`tenant-scoped.repository.ts`](apps/api/src/common/tenant-scoped.repository.ts)
-
-### 4. Fail-Closed IDOR Protection
-
-Cross-tenant resource access doesn't return `403 Forbidden` — it returns `404 Not Found`. This prevents an attacker from confirming whether a resource ID exists in another tenant.  
-→ All `findFirst({ where: { id, organizationId } })` patterns in service files
-
-### 5. Idempotent Queue Workers
-
-The async worker checks for an existing `Alert` matching the incoming `eventId` before creating anything. Duplicate job delivery (BullMQ at-least-once guarantee) is handled without double-processing.  
-→ [`queue.worker.ts`](apps/api/src/queues/queue.worker.ts)
-
-### 6. Production Redis Boundary
-
-`QueueService` throws at startup if `NODE_ENV=production`, `REDIS_URL` is missing, and `ENABLE_IN_MEMORY_QUEUE_FALLBACK` is not explicitly set to `true`. The server will not start silently with mock infrastructure in production.  
-→ [`queue.service.ts`](apps/api/src/queues/queue.service.ts) — `onModuleInit()`
-
-### 7. Threat Intelligence Provider Abstraction
-
-`LocalThreatIntelProvider` and `ExternalThreatIntelProvider` implement the same interface. Services use the local provider by default. External providers require configuration. The distinction is explicit in the investigation response (`source: 'LOCAL_INTELLIGENCE' | 'EXTERNAL_INTELLIGENCE'`).  
-→ [`threat-intel.provider.ts`](apps/api/src/intelligence/threat-intel.provider.ts)
-
-### 8. Auditable Incident State Machine
-
-Valid incident state transitions are defined in a static `ALLOWED_STATUS_TRANSITIONS` map. Attempting an invalid transition (e.g., `CLOSED → INVESTIGATING` outside allowed paths) throws `400 BadRequestException`. Every successful transition writes an `INCIDENT_STATUS_TRANSITION` audit record with `previousValues` and `newValues`.  
-→ [`incidents.service.ts`](apps/api/src/incidents/incidents.service.ts) — `update()`, `ALLOWED_STATUS_TRANSITIONS`
-
 ---
 
-## Security Architecture
+## Relevant docs
 
-### Request Lifecycle
-
-```
-Incoming HTTP Request
-  │
-  ├── JwtAuthGuard
-  │     Validates JWT from Authorization header or HttpOnly cookie.
-  │     Attaches user + organization membership to request context.
-  │
-  ├── TenantGuard
-  │     Verifies request.member.organizationId is present.
-  │     Throws ForbiddenException if no active organization context.
-  │
-  ├── NestJS Controller
-  │     Passes AuthenticatedRequest to the service layer.
-  │
-  ├── TenantScopedRepository (extended by every service)
-  │     Resolves organizationId from request — never from client input.
-  │     Throws if accessed outside an authenticated tenant scope.
-  │
-  ├── Prisma Query
-  │     Every query includes: where: { organizationId: this.organizationId }
-  │
-  └── AuditLog
-        Privileged mutations write an immutable audit record.
-```
-
-### Concrete Protections
-
-| Protection | Implementation |
-|:--|:--|
-| JWT Authentication | `JwtAuthGuard` validates Bearer token and HttpOnly cookie sessions |
-| Tenant Resolution | `organizationId` resolved from verified JWT membership, not URL/body |
-| IDOR Prevention | `findFirst({ where: { id, organizationId } })` — returns `404` not `403` |
-| Analyst Membership Validation | `assignedAnalystId` verified against `organizationMember` before assignment |
-| Backend-Authoritative State | `status`, `riskScore`, `organizationId`, `auditLog` are never trusted from client |
-| State Machine Enforcement | Invalid transitions throw `BadRequestException` before any DB write |
-| Audit Logging | All privileged mutations create `AuditLog` records with actor, timestamp, diff |
-
----
-
-## Failure & Recovery Behavior
-
-| Scenario | Actual Behavior |
-|:--|:--|
-| **Duplicate event ingested** | Deduplication query matches event within 5-minute window → returns existing event, skips detection, logs `EVENT_INGESTION_DUPLICATE` |
-| **Duplicate async job delivered** | Worker checks for existing `Alert` by `eventId` → idempotently skips, returns `{ status: 'skipped_duplicate' }` |
-| **Invalid event payload** | `normalizeEvent()` applies safe defaults; unknown severity maps to `LOW`; missing fields do not panic |
-| **Unauthorized request (no JWT)** | `JwtAuthGuard` throws `401 UnauthorizedException` |
-| **Cross-tenant resource access (IDOR)** | `findFirst({ id, organizationId })` returns `null` → service throws `404 NotFoundException` |
-| **Invalid incident state transition** | `BadRequestException` with allowed transitions listed; no DB write occurs |
-| **Missing Redis in production** | `QueueService.onModuleInit()` throws at startup — server does not boot |
-| **Redis connection failure (dev)** | Falls back to `ioredis-mock` with warning log if `ENABLE_IN_MEMORY_QUEUE_FALLBACK=true` |
-| **External intelligence unavailable** | `ExternalThreatIntelProvider` returns `null`; investigation response marks `source: 'UNAVAILABLE'` |
-| **External intelligence provider error** | Provider catches error internally; investigation continues with local intelligence only |
-| **Failed comment/task mutation** | Service validates incident `organizationId` membership before write; throws `NotFoundException` if not found |
-
----
-
-## Tech Stack
-
-**Frontend (`apps/web`)**
-- Next.js 14 App Router, React 18, TypeScript
-- Tailwind CSS with custom dark SOC design tokens
-- Recharts (severity/incident charts), ReactFlow (threat propagation graph)
-- Lucide React icons
-- Centralized typed API client (`apps/web/lib/api-client.ts`)
-
-**Backend (`apps/api`)**
-- NestJS with request-scoped dependency injection
-- JWT authentication via `@nestjs/jwt`
-- BullMQ queue with `ioredis` client
-- `bcryptjs` for password hashing, `cookie-parser`, `class-validator`
-
-**Database & Schema**
-- Prisma ORM targeting PostgreSQL (SQLite in local development)
-- Shared TypeScript types in `packages/shared-types`
-
-**Testing**
-- Jest with custom service-layer mocks
-- 7 test suites, 76 passing tests across: auth, tenant isolation, queue hardening, event detection, investigation, threat intelligence
-
----
-
-## Engineering Metrics
-
-| Metric | Value | Verified |
-|:--|:--|:--|
-| Test suites | 7 | ✓ |
-| Passing tests | 76 | ✓ |
-| API domain modules | 10 (auth, events, alerts, incidents, assets, intelligence, vulnerabilities, organizations, audit, health) | ✓ |
-| Investigation entity types | 7 (Incident, Alert, Event, Asset, IOC, Vulnerability, Audit) | ✓ |
-| Queue types | 2 (`telemetry-ingestion`, `alert-escalation`) | ✓ |
-| Incident lifecycle states | 8 (OPEN → TRIAGED → INVESTIGATING → CONTAINMENT_IN_PROGRESS → CONTAINED → REMEDIATION_IN_PROGRESS → MONITORING → RESOLVED → CLOSED) | ✓ |
-| Frontend investigation consoles | 4 (Alert, Incident, Asset, IOC) | ✓ |
-| Documented API contracts | [`docs/API_CONTRACTS.md`](docs/API_CONTRACTS.md) | ✓ |
-
----
-
-## Key Design Decisions
-
-**Next.js + NestJS monorepo**  
-→ Both share `packages/shared-types`, eliminating DTO drift. The workspace setup means one `npm install` runs everything.  
-→ Tradeoff: NestJS request-scoped services add overhead; acceptable for a correctness-first architecture.
-
-**Prisma over raw SQL**  
-→ Schema-first migrations, type-safe queries, and multi-database support (SQLite locally, PostgreSQL in production) without changing service code.  
-→ Tradeoff: Prisma's `findFirst` with complex `OR` conditions can be verbose; raw SQL would be more expressive for the event search endpoint.
-
-**`packages/shared-types`**  
-→ API response shapes are defined once and imported by both the NestJS controllers and the Next.js API client. Type drift between backend and frontend is a compile error, not a runtime surprise.
-
-**Centralized API client (`apps/web/lib/api-client.ts`)**  
-→ All HTTP calls go through one file. Authorization headers, error propagation, and session logic are in one place. Pages don't contain raw `fetch()` calls.  
-→ Tradeoff: The client is not a full query library (no caching, no deduplication). That's appropriate — this is not an SPA with complex client-side state.
-
-**BullMQ + Redis for async ingestion**  
-→ High-volume event ingestion shouldn't block the HTTP response. BullMQ provides reliable at-least-once delivery with exponential backoff retries and job ID-based idempotency.  
-→ Tradeoff: BullMQ is heavier than a simple task queue. The idempotency check in the worker compensates for at-least-once delivery.
-
-**Deterministic local intelligence**  
-→ The investigation console works without external API keys. `LocalThreatIntelProvider` queries the organization's own IOC database. The provider interface means an external VirusTotal/AbuseIPDB provider can be swapped in via configuration.  
-→ Tradeoff: Local intelligence is only as good as what's been ingested. It won't detect unknown indicators.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/CASE_STUDY.md](docs/CASE_STUDY.md)
+- [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)
+- [docs/INTERVIEW_NOTES.md](docs/INTERVIEW_NOTES.md)
+- [docs/PORTFOLIO_COPY.md](docs/PORTFOLIO_COPY.md)
+- [docs/API_CONTRACTS.md](docs/API_CONTRACTS.md)
 
 **Request-scoped services for tenant isolation**  
 → Services injected with `Scope.REQUEST` receive a fresh instance per HTTP request, with the tenant `organizationId` bound to that request's JWT context. No cross-request state leakage is possible.  

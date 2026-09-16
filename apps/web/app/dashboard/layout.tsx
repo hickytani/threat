@@ -25,6 +25,7 @@ import {
   Workflow,
   ShieldAlert,
   Building2
+  ,KeyRound
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -77,6 +78,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Vulnerabilities', href: '/dashboard/vulnerabilities', icon: Database },
     { name: 'Audit Logs', href: '/dashboard/audit', icon: FileSpreadsheet },
     { name: 'Organization', href: '/dashboard/organization', icon: Building2 },
+    { name: 'Telemetry Ingestion', href: '/dashboard/ingestion', icon: KeyRound },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
     { name: 'Compliance Checklist', href: '/dashboard/compliance', icon: Shield },
   ];

@@ -414,6 +414,36 @@ This document is the authoritative inventory of the application API contracts cu
   }
   ```
 
+  ## Dashboard
+
+  ### GET /dashboard/summary
+  - Auth required: Yes
+  - Tenant scope: Yes
+  - Success response includes active alert, incident, asset risk, event count, and latest event timestamp for the authenticated organization.
+
+  ## Ingestion credentials
+
+  ### GET /organizations/current/ingestion-credentials
+  - Auth required: Yes
+  - Roles: `ORG_ADMIN` or `SOC_MANAGER`
+  - Returns metadata only; token secrets are never returned after creation.
+
+  ### POST /organizations/current/ingestion-credentials
+  - Auth required: Yes
+  - Roles: `ORG_ADMIN` or `SOC_MANAGER`
+  - Request body: `{ "name": "production collector", "expiresAt": "2027-01-01T00:00:00.000Z" }`
+  - Returns the full `ts_ing_` token once.
+
+  ### DELETE /organizations/current/ingestion-credentials/:id
+  - Auth required: Yes
+  - Roles: `ORG_ADMIN` or `SOC_MANAGER`
+  - Revokes the credential within the active organization.
+
+  ### POST /events/ingest
+  - Auth required: Yes, using `Authorization: Bearer ts_ing_<credential>`
+  - Tenant scope: Derived from the ingestion credential
+  - Browser JWTs and payload organization IDs are not accepted as ingestion authority.
+
 ## Error contract
 - The current backend is inconsistent in its error payloads; the preferred standardized error shape is:
   ```json

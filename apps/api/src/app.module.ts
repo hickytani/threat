@@ -12,6 +12,8 @@ import { AuditModule } from './audit/audit.module.js';
 import { VulnerabilitiesModule } from './vulnerabilities/vulnerabilities.module.js';
 import { QueuesModule } from './queues/queues.module.js';
 import { EventsModule } from './events/events.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
+import { IngestionModule } from './ingestion/ingestion.module.js';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { EventsModule } from './events/events.module.js';
     VulnerabilitiesModule,
     QueuesModule,
     EventsModule,
+    DashboardModule,
+    IngestionModule,
   ],
   controllers: [HealthController],
   providers: [RequestIdMiddleware],
