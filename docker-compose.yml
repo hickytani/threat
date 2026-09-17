@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: threatsync-postgres
+    environment:
+      POSTGRES_DB: threatsync
+      POSTGRES_USER: threatsync
+      POSTGRES_PASSWORD: threatsync_secure_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U threatsync"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: threatsync-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: threatsync-api
+    environment:
+      DATABASE_URL: postgresql://threatsync:threatsync_secure_password@postgres:5432/threatsync?schema=public
+      REDIS_URL: redis://redis:6379
+      PORT: 3001
+      JWT_SECRET: threatsync_prod_secret_jwt_key_change_in_production_32bytes
+      ENABLE_IN_MEMORY_QUEUE_FALLBACK: "false"
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: threatsync-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
