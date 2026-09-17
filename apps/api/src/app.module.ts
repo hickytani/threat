@@ -14,6 +14,9 @@ import { QueuesModule } from './queues/queues.module.js';
 import { EventsModule } from './events/events.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { IngestionModule } from './ingestion/ingestion.module.js';
+import { RulesModule } from './rules/rules.module.js';
+import { IntegrationsModule } from './integrations/integrations.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -30,6 +33,9 @@ import { IngestionModule } from './ingestion/ingestion.module.js';
     EventsModule,
     DashboardModule,
     IngestionModule,
+    RulesModule,
+    IntegrationsModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   providers: [RequestIdMiddleware],

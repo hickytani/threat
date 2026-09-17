@@ -131,6 +131,8 @@ model Organization {
   rules        DetectionRule[]
   integrations Integration[]
   ingestionCredentials IngestionCredential[]
+  notificationPolicies NotificationPolicy[]
+  notificationDeliveries NotificationDelivery[]
   auditLogs    AuditLog[]
 }
 
@@ -231,6 +233,7 @@ model Alert {
   organization        Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   asset               Asset?        @relation(fields: [assetId], references: [id], onDelete: SetNull)
   incident            Incident?     @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  comments            AlertComment[]
 
   @@index([organizationId])
   @@index([organizationId, timestamp])
@@ -469,17 +472,25 @@ model Integration {
   id                   String       @id @default(uuid())
   organizationId       String
   name                 String
-  type                 String       // IOC_INTEL, VULN_FEED, WEBHOOK, SLACK, etc.
-  isEnabled            Boolean      @default(false)
+  type                 String       // WEBHOOK, AWS_CLOUDTRAIL, GENERIC_HTTP, IOC_INTEL, VULN_FEED, etc.
+  isEnabled            Boolean      @default(true)
+  status               String       @default("ACTIVE") // ACTIVE, PAUSED, ERROR, DISCONNECTED, NOT_CONFIGURED
+  health               String       @default("OK")     // OK, DEGRADED, FAILED, UNKNOWN
   lastSync             DateTime?
-  health               String       @default("UNKNOWN") // OK, FAILED, UNKNOWN
+  lastReceivedAt       DateTime?
+  lastSuccessfulAt     DateTime?
+  lastFailureAt        DateTime?
+  lastErrorMessage     String?
+  errorCount           Int          @default(0)
+  eventCount           Int          @default(0)
   configuration        Json         @default("{}")      // Actual Postgres JSONB configurations
-  encryptedCredentials String? // Encrypted JSON string of keys/tokens
+  encryptedCredentials String?      // Encrypted JSON string of keys/tokens or secret
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
   organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+  @@index([organizationId, status])
 }
 
 // Dedicated machine credential for organization-scoped telemetry ingestion.
@@ -521,4 +532,63 @@ model AuditLog {
   @@index([organizationId])
   @@index([organizationId, resourceType, resourceId])
   @@index([timestamp])
+}
+
+// Alert Comment Model
+model AlertComment {
+  id         String   @id @default(uuid())
+  alertId    String
+  authorId   String
+  authorName String
+  content    String
+  createdAt  DateTime @default(now())
+  alert      Alert    @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId])
+}
+
+// Notification Policy Model
+model NotificationPolicy {
+  id             String                 @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  isEnabled      Boolean                @default(true)
+  minSeverity    AlertSeverity          @default(HIGH)
+  channelType    String                 @default("WEBHOOK")
+  webhookUrl     String
+  secretToken    String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deliveries     NotificationDelivery[]
+
+  @@index([organizationId])
+}
+
+// Notification Delivery Log Model
+model NotificationDelivery {
+  id               String              @id @default(uuid())
+  organizationId   String
+  policyId         String?
+  alertId          String?
+  incidentId       String?
+  provider         String              @default("WEBHOOK")
+  destinationUrl   String
+  status           String              @default("QUEUED") // QUEUED, SENDING, DELIVERED, FAILED
+  attemptCount     Int                 @default(0)
+  payload          Json                @default("{}")
+  responseMetadata Json?
+  correlationId    String?
+  sentAt           DateTime?
+  failedAt         DateTime?
+  createdAt        DateTime            @default(now())
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  policy           NotificationPolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([policyId])
+  @@index([alertId])
+  @@index([incidentId])
+  @@index([status])
 }

@@ -483,3 +483,43 @@ export interface AssetInvestigationDetail extends Asset {
   relatedIocs: IOC[];
   timeline?: TimelineItem[];
 }
+
+export type IntegrationStatus = 'ACTIVE' | 'PAUSED' | 'ERROR' | 'DISCONNECTED' | 'NOT_CONFIGURED';
+export type IntegrationHealth = 'OK' | 'DEGRADED' | 'FAILED' | 'UNKNOWN';
+
+export interface Integration {
+  id: string;
+  organizationId: string;
+  name: string;
+  type: string;
+  isEnabled: boolean;
+  status: IntegrationStatus;
+  health: IntegrationHealth;
+  lastSync?: string;
+  lastReceivedAt?: string;
+  lastSuccessfulAt?: string;
+  lastFailureAt?: string;
+  lastErrorMessage?: string;
+  errorCount: number;
+  eventCount: number;
+  configuration: Record<string, any>;
+  encryptedCredentials?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IntegrationMetrics {
+  totalEvents: number;
+  eventsLast24h: number;
+  eventsLastHour: number;
+  alertsGenerated: number;
+  incidentsGenerated: number;
+  deduplicatedEvents: number;
+  errorCount: number;
+  health: IntegrationHealth;
+  status: IntegrationStatus;
+  lastReceivedAt?: string;
+  lastFailureAt?: string;
+  lastErrorMessage?: string;
+}
+

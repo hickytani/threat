@@ -46,6 +46,26 @@ export class AlertsController {
     return this.alertsService.update(alertId, data);
   }
 
+  @Get(':alertId/related')
+  @HttpCode(HttpStatus.OK)
+  async getRelated(
+    @Param('alertId') alertId: string,
+  ) {
+    return this.alertsService.getRelated(alertId);
+  }
+
+  @Post(':alertId/comments')
+  @HttpCode(HttpStatus.CREATED)
+  async addComment(
+    @Param('alertId') alertId: string,
+    @Body('content') content: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user?.id || '';
+    const authorName = req.user?.fullName || 'SOC Analyst';
+    return this.alertsService.addComment(alertId, content, userId, authorName);
+  }
+
   @Post(':alertId/create-incident')
   @HttpCode(HttpStatus.CREATED)
   async createIncident(

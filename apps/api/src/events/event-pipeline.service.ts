@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service.js';
 import { CorrelationService } from '../queues/correlation.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { AlertSeverity, AlertStatus, AssetCriticality, AssetType, Environment, Prisma } from '@prisma/client';
 
 export interface IngestEventInput {
@@ -47,6 +48,7 @@ export class EventPipelineService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly correlationService: CorrelationService,
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   /**
@@ -142,6 +144,17 @@ export class EventPipelineService {
 
     // 5. Evaluate Detection Rules
     const alertsCreated = await this.runDetections(organizationId, normalizedEvent, actor, context);
+
+    // 5.1 Evaluate Notification Policies
+    if (this.notificationsService?.evaluateAndDispatchAlertNotifications) {
+      for (const alert of alertsCreated) {
+        try {
+          await this.notificationsService.evaluateAndDispatchAlertNotifications(organizationId, alert);
+        } catch (err: any) {
+          this.logger.warn(`${logPrefix} Notification dispatch error for alert ${alert.id}: ${err.message}`);
+        }
+      }
+    }
 
     // 6. Run Correlation Engine for every generated alert
     const incidentsCreated: any[] = [];

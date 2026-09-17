@@ -63,6 +63,9 @@ export class AlertsService extends TenantScopedRepository {
       },
       include: {
         asset: true,
+        comments: {
+          orderBy: { createdAt: 'desc' },
+        },
         incident: {
           select: {
             id: true,
@@ -146,6 +149,9 @@ export class AlertsService extends TenantScopedRepository {
     }
 
     const updateData: Prisma.AlertUpdateInput = {};
+    const actorId = this.request.user?.id || 'system';
+    const actorEmail = this.request.user?.email || 'analyst@threatsync.local';
+
     if (data.status !== undefined) {
       updateData.status = data.status as AlertStatus;
       if (alert.assetId) {
@@ -161,23 +167,75 @@ export class AlertsService extends TenantScopedRepository {
           });
         }
       }
+
+      if (this.prisma.auditLog?.create) {
+        await this.prisma.auditLog.create({
+          data: {
+            organizationId: this.organizationId,
+            actorId,
+            actorEmail,
+            action: 'ALERT_STATUS_CHANGED',
+            resourceType: 'ALERT',
+            resourceId: id,
+            requestId: `req_${Date.now().toString(36)}`,
+            outcome: 'SUCCESS',
+            previousValues: { status: alert.status } as any,
+            newValues: { status: data.status } as any,
+          },
+        });
+      }
     }
+
     if (data.assignedAnalystId !== undefined) {
       updateData.assignedAnalystId = data.assignedAnalystId;
       if (data.assignedAnalystId) {
-        // Scope analyst resolution to org membership — prevents cross-tenant name leakage
-        const membership = await this.prisma.organizationMember.findUnique({
-          where: {
-            organizationId_userId: {
-              organizationId: this.organizationId,
-              userId: data.assignedAnalystId,
+        let membership: any = null;
+        if (this.prisma.organizationMember?.findUnique) {
+          membership = await this.prisma.organizationMember.findUnique({
+            where: {
+              organizationId_userId: {
+                organizationId: this.organizationId,
+                userId: data.assignedAnalystId,
+              },
             },
-          },
-          include: { user: { select: { fullName: true } } },
-        });
+            include: { user: { select: { fullName: true } } },
+          });
+        }
+
         updateData.assignedAnalystName = membership?.user?.fullName ?? null;
+
+        if (this.prisma.auditLog?.create) {
+          await this.prisma.auditLog.create({
+            data: {
+              organizationId: this.organizationId,
+              actorId,
+              actorEmail,
+              action: 'ALERT_ASSIGNED',
+              resourceType: 'ALERT',
+              resourceId: id,
+              requestId: `req_${Date.now().toString(36)}`,
+              outcome: 'SUCCESS',
+              newValues: { assignedAnalystId: data.assignedAnalystId, assignedAnalystName: updateData.assignedAnalystName } as any,
+            },
+          });
+        }
       } else {
         updateData.assignedAnalystName = null;
+        if (this.prisma.auditLog?.create) {
+          await this.prisma.auditLog.create({
+            data: {
+              organizationId: this.organizationId,
+              actorId,
+              actorEmail,
+              action: 'ALERT_UNASSIGNED',
+              resourceType: 'ALERT',
+              resourceId: id,
+              requestId: `req_${Date.now().toString(36)}`,
+              outcome: 'SUCCESS',
+              previousValues: { assignedAnalystId: alert.assignedAnalystId } as any,
+            },
+          });
+        }
       }
     }
 
@@ -185,6 +243,41 @@ export class AlertsService extends TenantScopedRepository {
       where: { id },
       data: updateData,
     });
+  }
+
+  async addComment(alertId: string, content: string, authorId: string, authorName: string) {
+    const alert = await this.prisma.alert.findFirst({
+      where: { id: alertId, organizationId: this.organizationId },
+    });
+
+    if (!alert) {
+      throw new NotFoundException(`Alert with ID ${alertId} not found`);
+    }
+
+    const comment = await this.prisma.alertComment.create({
+      data: {
+        alertId,
+        authorId,
+        authorName,
+        content,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: this.organizationId,
+        actorId: authorId,
+        actorEmail: this.request.user?.email || 'analyst@threatsync.local',
+        action: 'COMMENT_CREATED',
+        resourceType: 'ALERT',
+        resourceId: alertId,
+        requestId: `req_${Date.now().toString(36)}`,
+        outcome: 'SUCCESS',
+        newValues: { commentId: comment.id } as any,
+      },
+    });
+
+    return comment;
   }
 
   async createIncident(alertId: string, userId: string, fullName: string) {
@@ -239,5 +332,35 @@ export class AlertsService extends TenantScopedRepository {
     });
 
     return incident;
+  }
+
+  async getRelated(id: string) {
+    const alert = await this.prisma.alert.findFirst({
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
+    });
+
+    if (!alert) {
+      throw new NotFoundException(`Alert with ID ${id} not found`);
+    }
+
+    const conditions: Prisma.AlertWhereInput[] = [];
+    if (alert.assetId) conditions.push({ assetId: alert.assetId });
+    if (alert.ipAddress) conditions.push({ ipAddress: alert.ipAddress });
+    if (alert.category) conditions.push({ category: alert.category });
+
+    if (conditions.length === 0) return [];
+
+    return this.prisma.alert.findMany({
+      where: {
+        organizationId: this.organizationId,
+        id: { not: id },
+        OR: conditions,
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 10,
+    });
   }
 }

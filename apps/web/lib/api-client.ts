@@ -228,3 +228,139 @@ export async function getDashboardIngestionMetrics() {
 export async function getAuthMe() {
   return apiRequest<any>('/auth/me');
 }
+
+// Rules API Client
+export async function getRules(params: Record<string, any> = {}) {
+  return apiRequest<any[]>(`/rules${buildQueryString(params)}`);
+}
+
+export async function createRule(data: any) {
+  return apiRequest<any>('/rules', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateRule(id: string, data: any) {
+  return apiRequest<any>(`/rules/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteRule(id: string) {
+  return apiRequest<any>(`/rules/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function testRule(matchConditions: Record<string, any>, sampleEvent: Record<string, any>) {
+  return apiRequest<any>('/rules/test', {
+    method: 'POST',
+    body: JSON.stringify({ matchConditions, sampleEvent }),
+  });
+}
+
+// Integrations API Client
+export async function getIntegrations(type?: string) {
+  return apiRequest<any[]>(`/integrations${buildQueryString({ type })}`);
+}
+
+export async function getIntegrationDetails(id: string) {
+  return apiRequest<any>(`/integrations/${id}`);
+}
+
+export async function getIntegrationMetrics(id: string) {
+  return apiRequest<any>(`/integrations/${id}/metrics`);
+}
+
+export async function createIntegration(data: any) {
+  return apiRequest<any>('/integrations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateIntegration(id: string, data: any) {
+  return apiRequest<any>(`/integrations/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function regenerateIntegrationSecret(id: string) {
+  return apiRequest<any>(`/integrations/${id}/regenerate-secret`, {
+    method: 'POST',
+  });
+}
+
+export async function revokeIntegrationSecret(id: string) {
+  return apiRequest<any>(`/integrations/${id}/revoke-secret`, {
+    method: 'POST',
+  });
+}
+
+export async function testIntegrationEvent(id: string, payload?: any) {
+  return apiRequest<any>(`/integrations/${id}/test-event`, {
+    method: 'POST',
+    body: JSON.stringify({ payload }),
+  });
+}
+
+export async function deleteIntegration(id: string) {
+  return apiRequest<any>(`/integrations/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// Extended Alert Workflow
+export async function updateAlert(alertId: string, data: any) {
+  return apiRequest<any>(`/alerts/${alertId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getRelatedAlerts(alertId: string) {
+  return apiRequest<any[]>(`/alerts/${alertId}/related`);
+}
+
+export async function addAlertComment(alertId: string, content: string) {
+  return apiRequest<any>(`/alerts/${alertId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+
+// Notification Engine API Client
+export async function getNotificationPolicies() {
+  return apiRequest<any[]>('/notifications/policies');
+}
+
+export async function createNotificationPolicy(data: any) {
+  return apiRequest<any>('/notifications/policies', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateNotificationPolicy(id: string, data: any) {
+  return apiRequest<any>(`/notifications/policies/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteNotificationPolicy(id: string) {
+  return apiRequest<any>(`/notifications/policies/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getNotificationHistory(params: Record<string, any> = {}) {
+  return apiRequest<any[]>(`/notifications/history${buildQueryString(params)}`);
+}
+
+export async function getOrgMembers() {
+  return apiRequest<any[]>('/organizations/current/members');
+}
