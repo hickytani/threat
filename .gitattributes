@@ -1,22 +1,25 @@
 # ThreatSync OS GitHub Linguist Language Configuration
 
-# Documentation
+# Mark documentation & non-code files as documentation
 docs/* linguist-documentation
 *.md linguist-documentation
 brain/* linguist-documentation
 scratch/* linguist-documentation
 
-# Vendored & Generated Files
+# Mark database migrations and static vendor assets as vendored
 packages/database/prisma/migrations/* linguist-vendored
 apps/web/public/* linguist-vendored
 node_modules/* linguist-vendored
 dist/* linguist-generated
 .venv/* linguist-vendored
 package-lock.json linguist-generated
+apps/web/.next/* linguist-generated
 
 # Real Language Definitions
 scripts/*.py linguist-language=Python
 scripts/*.sh linguist-language=Shell
 native/src/*.c linguist-language=C
+native/src/*.h linguist-language=C
 native/Makefile linguist-language=Makefile
 Dockerfile linguist-language=Dockerfile
+docker-compose.yml linguist-language=YAML
