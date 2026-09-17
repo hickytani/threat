@@ -1,0 +1,11 @@
+# ThreatSync OS GitHub Linguist Language Configuration
+
+# Mark documentation files as documentation
+docs/* linguist-documentation
+*.md linguist-documentation
+
+# Mark database migrations as vendored
+packages/database/prisma/migrations/* linguist-vendored
+
+# Mark static web public assets as vendored
+apps/web/public/* linguist-vendored
