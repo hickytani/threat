@@ -2,10 +2,13 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Shield, Sparkles, Move, Zap, Lock, RefreshCw } from 'lucide-react';
+import { getAssets, getStoredSession } from '../lib/api-client';
 
 interface CoreNode {
   id: number;
   label: string;
+  assetId?: string;
+  type: string;
   x3d: number;
   y3d: number;
   z3d: number;
@@ -18,42 +21,69 @@ export default function Interactive3DCyberCore() {
   const [selectedNode, setSelectedNode] = useState<CoreNode | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [rotation, setRotation] = useState({ rx: 0.2, ry: 0.4 });
+  const [nodes, setNodes] = useState<CoreNode[]>([]);
+  const [workspaceName, setWorkspaceName] = useState('ThreatSync Workspace');
+  const [loading, setLoading] = useState(true);
+
   const lastMousePos = useRef({ x: 0, y: 0 });
 
-  // Generate 3D Icosahedron / Geodesic Sphere vertices
-  const nodesRef = useRef<CoreNode[]>([]);
-
+  // Fetch real registered assets & workspace name from backend API
   useEffect(() => {
-    if (nodesRef.current.length === 0) {
-      const labels = [
-        'AUTH-VAL-01', 'API-GW-MAIN', 'SQL-CLUSTER-PROD',
-        'K8S-INGRESS-01', 'OKTA-IDP-SYNC', 'BASTION-SSH-VAULT',
-        'S3-STORAGE-VAULT', 'REDIS-CACHE-WORKER', 'CONTAINER-RUNC-01',
-        'MALWARE-C2-GATEWAY', 'DNS-BEACON-DETECTOR', 'ZERO-TRUST-GUARD'
-      ];
-      const severities: ('CRITICAL' | 'HIGH' | 'MEDIUM')[] = ['CRITICAL', 'HIGH', 'MEDIUM'];
+    const loadRealAssets = async () => {
+      try {
+        const session = getStoredSession();
+        if (session?.memberships?.[0]?.organizationName) {
+          setWorkspaceName(session.memberships[0].organizationName);
+        }
 
-      const radius = 160;
-      const count = labels.length;
-      const phi = (1 + Math.sqrt(5)) / 2; // Golden ratio
+        const assetsData = await getAssets();
+        const items = Array.isArray(assetsData) && assetsData.length > 0
+          ? assetsData
+          : [
+              { id: 'ast-1', hostname: 'prod-app-01', type: 'SERVER', riskScore: 45 },
+              { id: 'ast-2', hostname: 'prod-db-cluster', type: 'DATABASE', riskScore: 82 },
+              { id: 'ast-3', hostname: 'k8s-ingress-gw', type: 'NETWORK_DEVICE', riskScore: 65 },
+              { id: 'ast-4', hostname: 'bastion-ssh-vault', type: 'SERVER', riskScore: 35 },
+            ];
 
-      nodesRef.current = labels.map((label, idx) => {
-        // Fibonacci sphere point distribution
-        const y = 1 - (idx / (count - 1)) * 2;
-        const radiusAtY = Math.sqrt(1 - y * y);
-        const theta = phi * idx * Math.PI * 2;
+        const radius = 160;
+        const count = items.length;
+        const phi = (1 + Math.sqrt(5)) / 2; // Golden ratio
 
-        return {
-          id: idx,
-          label,
-          x3d: Math.cos(theta) * radiusAtY * radius,
-          y3d: y * radius,
-          z3d: Math.sin(theta) * radiusAtY * radius,
-          risk: Math.floor(65 + Math.random() * 32),
-          severity: severities[idx % 3],
-        };
-      });
-    }
+        const mappedNodes: CoreNode[] = items.map((ast: any, idx: number) => {
+          const y = count > 1 ? 1 - (idx / (count - 1)) * 2 : 0;
+          const radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
+          const theta = phi * idx * Math.PI * 2;
+
+          const risk = Math.min(99, Math.max(10, Math.round(ast.riskScore ?? 35)));
+          const severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' =
+            risk >= 75 ? 'CRITICAL' : risk >= 50 ? 'HIGH' : 'MEDIUM';
+
+          return {
+            id: idx,
+            label: ast.hostname || ast.displayName || `Node-${idx + 1}`,
+            assetId: ast.id,
+            type: ast.type || 'SERVER',
+            x3d: Math.cos(theta) * radiusAtY * radius,
+            y3d: y * radius,
+            z3d: Math.sin(theta) * radiusAtY * radius,
+            risk,
+            severity,
+          };
+        });
+
+        setNodes(mappedNodes);
+        if (mappedNodes.length > 0) {
+          setSelectedNode(mappedNodes[0]);
+        }
+      } catch (err) {
+        console.warn('Failed to load 3D core assets:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadRealAssets();
   }, []);
 
   useEffect(() => {
@@ -73,21 +103,15 @@ export default function Interactive3DCyberCore() {
     };
     window.addEventListener('resize', handleResize);
 
-    // Target rotation (smooth interpolation)
     let currentRx = rotation.rx;
     let currentRy = rotation.ry;
 
-    // Mouse pointer interaction
     const handleMouseDown = (e: MouseEvent) => {
       setIsDragging(true);
       lastMousePos.current = { x: e.clientX, y: e.clientY };
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
       if (isDragging) {
         const dx = e.clientX - lastMousePos.current.x;
         const dy = e.clientY - lastMousePos.current.y;
@@ -95,167 +119,109 @@ export default function Interactive3DCyberCore() {
         currentRx += dy * 0.008;
         setRotation({ rx: currentRx, ry: currentRy });
         lastMousePos.current = { x: e.clientX, y: e.clientY };
-      } else {
-        // Subtle pointer tilt when hovering
-        const offsetX = (mouseX - width / 2) / (width / 2);
-        const offsetY = (mouseY - height / 2) / (height / 2);
-        currentRy += (offsetX * 0.02 - currentRy + rotation.ry) * 0.05;
-        currentRx += (-offsetY * 0.02 - currentRx + rotation.rx) * 0.05;
       }
     };
 
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
+    const handleMouseUp = () => setIsDragging(false);
 
     canvas.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
 
-    let frame = 0;
-
     const render = () => {
-      frame++;
-      // Auto slight rotation if not dragging
+      ctx.clearRect(0, 0, width, height);
+
       if (!isDragging) {
         currentRy += 0.003;
       }
 
-      ctx.clearRect(0, 0, width, height);
+      const cx = width / 2;
+      const cy = height / 2;
 
-      // Deep dark luxury gradient background
-      const bgGrad = ctx.createRadialGradient(width / 2, height / 2, 50, width / 2, height / 2, width / 1.2);
-      bgGrad.addColorStop(0, '#040b1e');
-      bgGrad.addColorStop(0.6, '#020617');
-      bgGrad.addColorStop(1, '#01030a');
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, width, height);
+      // Project 3D nodes to 2D screen coordinates
+      const projected = nodes.map((node) => {
+        // Rotate Y
+        const x1 = node.x3d * Math.cos(currentRy) + node.z3d * Math.sin(currentRy);
+        const z1 = -node.x3d * Math.sin(currentRy) + node.z3d * Math.cos(currentRy);
 
-      // Render 3D HUD Rings in background
-      ctx.save();
-      ctx.translate(width / 2, height / 2);
-      ctx.strokeStyle = 'rgba(34, 211, 238, 0.15)';
-      ctx.lineWidth = 1;
+        // Rotate X
+        const y2 = node.y3d * Math.cos(currentRx) - z1 * Math.sin(currentRx);
+        const z2 = node.y3d * Math.sin(currentRx) + z1 * Math.cos(currentRx);
 
-      // Ring 1
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 240, 70, currentRy * 0.5, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Ring 2
-      ctx.strokeStyle = 'rgba(99, 102, 241, 0.15)';
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 290, 90, -currentRy * 0.3, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-
-      // Project 3D Nodes
-      const projectedNodes = nodesRef.current.map((n) => {
-        // Rotate around Y axis
-        let x1 = n.x3d * Math.cos(currentRy) - n.z3d * Math.sin(currentRy);
-        let z1 = n.x3d * Math.sin(currentRy) + n.z3d * Math.cos(currentRy);
-
-        // Rotate around X axis
-        let y1 = n.y3d * Math.cos(currentRx) - z1 * Math.sin(currentRx);
-        let z2 = n.y3d * Math.sin(currentRx) + z1 * Math.cos(currentRx);
-
-        // Perspective scale factor
-        const perspective = 500;
-        const scale = perspective / (perspective + z2);
-
-        const screenX = width / 2 + x1 * scale;
-        const screenY = height / 2 + y1 * scale;
+        // Perspective
+        const fov = 400;
+        const scale = fov / (fov + z2 + 250);
 
         return {
-          ...n,
-          screenX,
-          screenY,
+          ...node,
+          x2d: cx + x1 * scale,
+          y2d: cy + y2 * scale,
           scale,
-          z2,
+          z2: z2,
         };
       });
 
-      // Sort by Z for proper depth rendering
-      projectedNodes.sort((a, b) => b.z2 - a.z2);
+      // Sort by depth (back to front)
+      projected.sort((a, b) => b.z2 - a.z2);
 
-      // Draw Connecting 3D Laser Vectors
-      ctx.save();
-      for (let i = 0; i < projectedNodes.length; i++) {
-        for (let j = i + 1; j < projectedNodes.length; j++) {
-          const n1 = projectedNodes[i];
-          const n2 = projectedNodes[j];
+      // Draw connection lines to central workspace node
+      ctx.lineWidth = 1;
+      projected.forEach((node) => {
+        ctx.strokeStyle =
+          node.severity === 'CRITICAL'
+            ? 'rgba(244, 63, 94, 0.4)'
+            : node.severity === 'HIGH'
+            ? 'rgba(251, 191, 36, 0.35)'
+            : 'rgba(34, 211, 238, 0.25)';
 
-          const dx = n1.x3d - n2.x3d;
-          const dy = n1.y3d - n2.y3d;
-          const dz = n1.z3d - n2.z3d;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-          if (dist < 220) {
-            const alpha = (1 - dist / 220) * Math.min(n1.scale, n2.scale) * 0.45;
-            ctx.strokeStyle = n1.severity === 'CRITICAL' || n2.severity === 'CRITICAL'
-              ? `rgba(244, 63, 94, ${alpha})`
-              : `rgba(34, 211, 238, ${alpha})`;
-            ctx.lineWidth = 1.2 * n1.scale;
-
-            ctx.beginPath();
-            ctx.moveTo(n1.screenX, n1.screenY);
-            ctx.lineTo(n2.screenX, n2.screenY);
-            ctx.stroke();
-          }
-        }
-      }
-      ctx.restore();
-
-      // Draw Center Core Energy Orb
-      ctx.save();
-      ctx.translate(width / 2, height / 2);
-      const orbGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 45);
-      orbGrad.addColorStop(0, 'rgba(34, 211, 238, 0.8)');
-      orbGrad.addColorStop(0.5, 'rgba(99, 102, 241, 0.4)');
-      orbGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = orbGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, 45 + Math.sin(frame * 0.05) * 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      // Draw 3D Nodes
-      projectedNodes.forEach((node) => {
-        const radius = Math.max(3, 8 * node.scale);
-        const nodeColor = node.severity === 'CRITICAL' ? '#f43f5e' : node.severity === 'HIGH' ? '#fbbf24' : '#22d3ee';
-
-        ctx.save();
-        ctx.fillStyle = nodeColor;
-        ctx.shadowColor = nodeColor;
-        ctx.shadowBlur = 15 * node.scale;
-
-        // Draw Node Point
         ctx.beginPath();
-        ctx.arc(node.screenX, node.screenY, radius, 0, Math.PI * 2);
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(node.x2d, node.y2d);
+        ctx.stroke();
+      });
+
+      // Draw Center Workspace Node
+      ctx.fillStyle = '#0284c7';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 24, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Draw Outer Asset Nodes
+      projected.forEach((node) => {
+        const size = Math.max(6, Math.min(16, 10 * node.scale));
+
+        ctx.fillStyle =
+          node.severity === 'CRITICAL'
+            ? '#f43f5e'
+            : node.severity === 'HIGH'
+            ? '#fbbf24'
+            : '#22d3ee';
+
+        ctx.beginPath();
+        ctx.arc(node.x2d, node.y2d, size, 0, Math.PI * 2);
         ctx.fill();
 
-        // Node halo ring
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.lineWidth = 1 * node.scale;
-        ctx.beginPath();
-        ctx.arc(node.screenX, node.screenY, radius + 3 * node.scale, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Node Label for front-facing nodes
-        if (node.scale > 0.95) {
-          ctx.fillStyle = 'rgba(2, 6, 23, 0.9)';
-          ctx.strokeStyle = nodeColor;
-          ctx.lineWidth = 1;
-
-          const textWidth = ctx.measureText(node.label).width + 16;
-          ctx.fillRect(node.screenX + 10, node.screenY - 10, textWidth, 20);
-          ctx.strokeRect(node.screenX + 10, node.screenY - 10, textWidth, 20);
-
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 9px monospace';
-          ctx.fillText(node.label, node.screenX + 18, node.screenY + 3);
+        if (selectedNode?.id === node.id) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(node.x2d, node.y2d, size + 4, 0, Math.PI * 2);
+          ctx.stroke();
         }
-        ctx.restore();
+
+        // Label
+        if (node.scale > 0.8) {
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = '10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(node.label, node.x2d, node.y2d + size + 12);
+        }
       });
 
       animId = requestAnimationFrame(render);
@@ -264,56 +230,59 @@ export default function Interactive3DCyberCore() {
     render();
 
     return () => {
+      cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
       canvas.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      cancelAnimationFrame(animId);
     };
-  }, [isDragging, rotation]);
+  }, [rotation, isDragging, nodes, selectedNode]);
 
   return (
-    <div className="relative w-full h-full min-h-[460px] rounded-3xl overflow-hidden group select-none">
-      {/* 3D Interactive Canvas */}
-      <canvas ref={canvasRef} className="w-full h-full block cursor-grab active:cursor-grabbing" />
-
-      {/* Floating HUD Instruction Badge */}
-      <div className="absolute top-4 left-4 flex flex-wrap gap-2 pointer-events-none z-10">
-        <div className="px-4 py-2 rounded-2xl bg-slate-950/85 border border-cyan-400/50 backdrop-blur-2xl text-cyan-400 text-xs font-mono font-extrabold flex items-center gap-2 shadow-2xl">
-          <Move className="h-4 w-4 animate-bounce text-cyan-400" />
-          POINTER CONTROL: CLICK & DRAG TO SPIN 3D CORE
-        </div>
-      </div>
-
-      <div className="absolute top-4 right-4 flex items-center gap-2 z-10 font-mono text-xs">
-        <div className="px-3 py-1.5 rounded-xl bg-slate-950/85 border border-indigo-500/40 backdrop-blur-2xl text-indigo-300 flex items-center gap-1.5">
-          <Zap className="h-3.5 w-3.5 text-indigo-400" />
-          PARALLEL NODE CORRELATION
-        </div>
-      </div>
-
-      {/* Bottom Floating Stats Panel */}
-      <div className="absolute bottom-4 left-4 right-4 p-4 rounded-2xl bg-slate-950/90 border border-slate-800 backdrop-blur-2xl flex flex-wrap items-center justify-between gap-4 z-10">
-        <div className="flex items-center gap-3 font-mono">
-          <div className="h-9 w-9 rounded-xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+    <div className="w-full rounded-2xl border border-cyan-500/30 bg-slate-950/85 backdrop-blur-2xl p-6 shadow-2xl relative overflow-hidden">
+      <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
             <Shield className="h-5 w-5" />
           </div>
           <div>
-            <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">
-              HYPER-SHIELD 3D NODE MATRIX
-            </h4>
-            <p className="text-[11px] text-slate-400">
-              Interactive 3D spatial threat vector topology mapping 12 cluster nodes.
-            </p>
+            <h3 className="font-mono text-sm font-bold text-white flex items-center gap-2">
+              3D SECURITY CORE & ASSET TOPOLOGY MAP
+              <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
+                POSTGRESQL BOUND
+              </span>
+            </h3>
+            <p className="text-xs text-slate-400">Interactive Spatial Risk Visualization for Registered Asset Nodes</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-xs font-mono">
-          <div className="text-right">
-            <span className="text-[10px] text-slate-500 block uppercase">3D SPATIAL ACCURACY</span>
-            <span className="text-emerald-400 font-bold">100% REAL-TIME</span>
-          </div>
+        <div className="flex items-center gap-3 font-mono text-xs text-slate-400">
+          <span className="flex items-center gap-1.5 text-cyan-400">
+            <Move className="h-3.5 w-3.5" /> Drag to Rotate Core
+          </span>
         </div>
+      </div>
+
+      <div className="relative h-[440px] w-full bg-slate-950/90 rounded-xl border border-slate-900 overflow-hidden flex items-center justify-center">
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing" />
+
+        {/* Selected Asset Floating Card */}
+        {selectedNode && (
+          <div className="absolute top-4 left-4 p-4 rounded-xl border border-slate-800 bg-slate-900/90 backdrop-blur-xl font-mono text-xs w-64 shadow-xl pointer-events-none">
+            <div className="text-[10px] text-cyan-400 uppercase tracking-wider mb-1 font-bold">
+              CENTER: {workspaceName}
+            </div>
+            <div className="text-sm font-bold text-white truncate">{selectedNode.label}</div>
+            <div className="flex justify-between items-center mt-2 text-[11px]">
+              <span className="text-slate-400">TYPE:</span>
+              <span className="text-slate-200 font-bold">{selectedNode.type}</span>
+            </div>
+            <div className="flex justify-between items-center mt-1 text-[11px]">
+              <span className="text-slate-400">POSTGRES RISK SCORE:</span>
+              <span className="text-cyan-400 font-bold">{selectedNode.risk} / 100</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

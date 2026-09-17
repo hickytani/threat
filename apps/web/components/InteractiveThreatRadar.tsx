@@ -13,30 +13,29 @@ import {
   Radio,
   Zap,
   Lock,
-  ArrowRight
+  ArrowRight,
+  RefreshCw
 } from 'lucide-react';
+import { getDashboardActivity, ApiClientError } from '../lib/api-client';
 
 interface ThreatEvent {
   id: string;
-  type: string;
+  eventType: string;
   sourceIp: string;
   target: string;
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'INFO';
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFORMATIONAL';
   timestamp: string;
   riskScore: number;
 }
 
-const INITIAL_EVENTS: ThreatEvent[] = [
-  { id: 'EVT-9041', type: 'Brute Force SSH Attack', sourceIp: '185.220.101.5', target: 'auth-service-01', severity: 'CRITICAL', timestamp: 'Just now', riskScore: 94 },
-  { id: 'EVT-9040', type: 'JWT Replay Anomaly', sourceIp: '198.51.100.42', target: 'api-gateway', severity: 'HIGH', timestamp: '12s ago', riskScore: 82 },
-  { id: 'EVT-9039', type: 'Sqlite Hash Mismatch', sourceIp: '10.0.4.12', target: 'tenant-db-prod', severity: 'MEDIUM', timestamp: '45s ago', riskScore: 61 },
-  { id: 'EVT-9038', type: 'Cross-Tenant Access Attempt', sourceIp: '203.0.113.88', target: 'org-vault-store', severity: 'CRITICAL', timestamp: '1m ago', riskScore: 98 },
-];
-
 export default function InteractiveThreatRadar() {
-  const [events, setEvents] = useState<ThreatEvent[]>(INITIAL_EVENTS);
-  const [selectedEvent, setSelectedEvent] = useState<ThreatEvent>(INITIAL_EVENTS[0]);
+  const [events, setEvents] = useState<ThreatEvent[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<ThreatEvent | null>(null);
   const [radarAngle, setRadarAngle] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
   const eventListRef = useRef<HTMLDivElement>(null);
   const detailPanelRef = useRef<HTMLDivElement>(null);
 
@@ -48,41 +47,51 @@ export default function InteractiveThreatRadar() {
     return () => clearInterval(interval);
   }, []);
 
-  // Simulate incoming live telemetry stream
+  // Fetch real security activity from backend API via polling
   useEffect(() => {
-    const streamInterval = setInterval(() => {
-      const types = [
-        'DDoS Syn Flood Vector',
-        'API Privilege Escalation',
-        'Unusual Outbound Egress',
-        'Malformed Request Payload',
-        'Invalid Tenant Signature'
-      ];
-      const severities: ('CRITICAL' | 'HIGH' | 'MEDIUM')[] = ['CRITICAL', 'HIGH', 'MEDIUM'];
-      const randomType = types[Math.floor(Math.random() * types.length)];
-      const randomSev = severities[Math.floor(Math.random() * severities.length)];
-      const newEvt: ThreatEvent = {
-        id: `EVT-${Math.floor(8000 + Math.random() * 2000)}`,
-        type: randomType,
-        sourceIp: `${Math.floor(Math.random() * 200 + 10)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-        target: `k8s-pod-${Math.floor(Math.random() * 90 + 10)}`,
-        severity: randomSev,
-        timestamp: 'Just now',
-        riskScore: Math.floor(60 + Math.random() * 38),
-      };
+    let controller: AbortController | null = null;
+    let isMounted = true;
 
-      setEvents((prev) => [newEvt, ...prev.slice(0, 5)]);
+    const fetchActivity = async () => {
+      controller = new AbortController();
+      try {
+        const data = await getDashboardActivity(controller.signal);
+        if (!isMounted) return;
 
-      if (eventListRef.current) {
-        gsap.fromTo(
-          eventListRef.current.firstElementChild,
-          { opacity: 0, x: -20, backgroundColor: 'rgba(34, 211, 238, 0.2)' },
-          { opacity: 1, x: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', duration: 0.6 }
-        );
+        const mapped: ThreatEvent[] = (data || []).map((item: any) => ({
+          id: item.id ? `EVT-${item.id.slice(-6).toUpperCase()}` : 'EVT-LOG',
+          eventType: item.eventType || item.message || 'Telemetry Event',
+          sourceIp: item.sourceIp || '10.0.1.50',
+          target: item.target || 'Server Host',
+          severity: item.severity || 'LOW',
+          timestamp: item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : 'Recent',
+          riskScore: Math.min(99, Math.max(10, Math.round(item.riskScore || 35))),
+        }));
+
+        setEvents(mapped);
+        if (mapped.length > 0 && !selectedEvent) {
+          setSelectedEvent(mapped[0]);
+        }
+        setError(null);
+        setLastUpdated(new Date());
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+        if (!isMounted) return;
+        console.warn('Failed to fetch radar telemetry:', err);
+        setError('Activity stream offline / Authentication required');
+      } finally {
+        if (isMounted) setLoading(false);
       }
-    }, 5000);
+    };
 
-    return () => clearInterval(streamInterval);
+    fetchActivity();
+    const pollInterval = setInterval(fetchActivity, 5000);
+
+    return () => {
+      isMounted = false;
+      if (controller) controller.abort();
+      clearInterval(pollInterval);
+    };
   }, []);
 
   const handleSelectEvent = (evt: ThreatEvent) => {
@@ -94,6 +103,23 @@ export default function InteractiveThreatRadar() {
         { scale: 1, opacity: 1, duration: 0.35, ease: 'back.out(1.7)' }
       );
     }
+  };
+
+  // Compute deterministic coordinates for radar blips based on event ID hash
+  const getBlipPosition = (id: string, index: number) => {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = (hash << 5) - hash + id.charCodeAt(i);
+      hash |= 0;
+    }
+    const angle = Math.abs(hash % 360);
+    const radiusPct = 25 + Math.abs((hash >> 4) % 55); // 25% to 80% radius
+    const rad = (angle * Math.PI) / 180;
+
+    const x = 50 + (radiusPct / 2) * Math.cos(rad);
+    const y = 50 + (radiusPct / 2) * Math.sin(rad);
+
+    return { top: `${y}%`, left: `${x}%` };
   };
 
   return (
@@ -111,25 +137,27 @@ export default function InteractiveThreatRadar() {
           </div>
           <div>
             <h3 className="font-mono text-sm font-bold tracking-wider text-white flex items-center gap-2">
-              REAL-TIME THREAT RADAR <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">LIVE FEED</span>
+              SECURITY TELEMETRY RADAR <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">POLLING LIVE STREAM</span>
             </h3>
-            <p className="text-xs text-slate-400">Deterministic Ingestion & Automated Risk Correlation Engine</p>
+            <p className="text-xs text-slate-400">PostgreSQL Log Processing & Deterministic Event Pipeline</p>
           </div>
         </div>
 
         <div className="flex items-center gap-4 text-xs font-mono">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-slate-300">Pipeline Status: <strong className="text-emerald-400">ACTIVE</strong></span>
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-slate-300">Pipeline: <strong className="text-emerald-400">ACTIVE</strong></span>
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800">
-            <Zap className="h-3.5 w-3.5 text-cyan-400" />
-            <span className="text-slate-300">Telemetry Rate: <strong className="text-cyan-400">4,280 eps</strong></span>
-          </div>
+          {lastUpdated && (
+            <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+              <RefreshCw className="h-3 w-3 text-cyan-400 animate-spin" style={{ animationDuration: '6s' }} />
+              Updated: {lastUpdated.toLocaleTimeString()}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Grid Content: Radar Sweep + Live Event Stream + Event Detail */}
+      {/* Grid Content: Radar Sweep + Real Event Stream + Event Detail */}
       <div className="grid lg:grid-cols-12 gap-6 items-stretch">
         
         {/* Visual Radar Display */}
@@ -151,15 +179,19 @@ export default function InteractiveThreatRadar() {
               }}
             />
 
-            {/* Radar Blips representing detected threats */}
-            <div className="absolute top-12 left-16 h-3 w-3 rounded-full bg-rose-500 animate-ping" />
-            <div className="absolute top-12 left-16 h-3 w-3 rounded-full bg-rose-500 border border-white" />
-
-            <div className="absolute bottom-16 right-12 h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse" />
-            <div className="absolute bottom-16 right-12 h-2.5 w-2.5 rounded-full bg-amber-400" />
-
-            <div className="absolute top-24 right-14 h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
-            <div className="absolute top-24 right-14 h-2 w-2 rounded-full bg-cyan-400" />
+            {/* Deterministic Radar Blips from Real Events */}
+            {events.slice(0, 5).map((evt, idx) => {
+              const pos = getBlipPosition(evt.id, idx);
+              const isHigh = evt.severity === 'CRITICAL' || evt.severity === 'HIGH';
+              return (
+                <div
+                  key={evt.id}
+                  className={`absolute h-2.5 w-2.5 rounded-full ${isHigh ? 'bg-rose-500 border border-white animate-pulse' : 'bg-cyan-400'}`}
+                  style={pos}
+                  title={`${evt.eventType} (${evt.sourceIp})`}
+                />
+              );
+            })}
 
             {/* Center target crosshair */}
             <Crosshair className="h-6 w-6 text-cyan-400 opacity-60 z-10" />
@@ -167,126 +199,146 @@ export default function InteractiveThreatRadar() {
 
           <div className="mt-4 text-center">
             <span className="text-[11px] font-mono text-cyan-400 uppercase tracking-widest block font-semibold">
-              SCANNING RANGE: FULL TELEMETRY
+              REAL DATABASE EVENT STREAM
             </span>
-            <span className="text-xs text-slate-400 mt-1 block">
-              Automated Graph Pattern Matching Active
+            <span className="text-xs text-slate-400 mt-1 block font-mono">
+              {events.length} Telemetry Record{events.length === 1 ? '' : 's'} Processed
             </span>
           </div>
         </div>
 
-        {/* Live Stream List */}
+        {/* Real Stream List */}
         <div className="lg:col-span-4 flex flex-col justify-between">
           <div className="text-xs font-mono text-slate-400 mb-3 flex items-center justify-between">
-            <span>INGESTION STREAM</span>
+            <span>DATABASE ACTIVITY FEED</span>
             <span className="text-cyan-400">SELECT TO INSPECT</span>
           </div>
 
-          <div ref={eventListRef} className="space-y-2.5 overflow-y-auto max-h-[320px] pr-1">
-            {events.map((evt) => {
-              const isSelected = evt.id === selectedEvent.id;
-              return (
-                <div
-                  key={evt.id}
-                  onClick={() => handleSelectEvent(evt)}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                    isSelected
-                      ? 'border-cyan-400 bg-cyan-950/40 shadow-lg shadow-cyan-950/50 scale-[1.02]'
-                      : 'border-slate-800/80 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900/90'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`h-2.5 w-2.5 rounded-full ${
-                        evt.severity === 'CRITICAL'
-                          ? 'bg-rose-500 animate-pulse'
-                          : evt.severity === 'HIGH'
-                          ? 'bg-amber-500'
-                          : 'bg-cyan-400'
-                      }`}
-                    />
-                    <div>
-                      <div className="text-xs font-bold text-white font-mono flex items-center gap-2">
-                        {evt.id}
-                        <span
-                          className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
-                            evt.severity === 'CRITICAL'
-                              ? 'bg-rose-950 text-rose-400 border border-rose-800'
-                              : evt.severity === 'HIGH'
-                              ? 'bg-amber-950 text-amber-400 border border-amber-800'
-                              : 'bg-cyan-950 text-cyan-400 border border-cyan-800'
-                          }`}
-                        >
-                          {evt.severity}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-300 font-medium leading-tight mt-0.5">
-                        {evt.type}
+          {loading && events.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500 font-mono">
+              Fetching real telemetry records...
+            </div>
+          ) : error ? (
+            <div className="p-4 rounded-lg bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 font-mono">
+              {error}
+            </div>
+          ) : events.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500 font-mono border border-dashed border-slate-800 rounded-xl">
+              No telemetry events recorded yet. Send your first event via ingestion API or curl.
+            </div>
+          ) : (
+            <div ref={eventListRef} className="space-y-2.5 overflow-y-auto max-h-[320px] pr-1">
+              {events.map((evt) => {
+                const isSelected = selectedEvent?.id === evt.id;
+                return (
+                  <div
+                    key={evt.id}
+                    onClick={() => handleSelectEvent(evt)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                      isSelected
+                        ? 'border-cyan-400 bg-cyan-950/40 shadow-lg shadow-cyan-950/50 scale-[1.02]'
+                        : 'border-slate-800/80 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900/90'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          evt.severity === 'CRITICAL'
+                            ? 'bg-rose-500 animate-pulse'
+                            : evt.severity === 'HIGH'
+                            ? 'bg-amber-500'
+                            : 'bg-cyan-400'
+                        }`}
+                      />
+                      <div>
+                        <div className="text-xs font-bold text-white font-mono flex items-center gap-2">
+                          {evt.id}
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                              evt.severity === 'CRITICAL'
+                                ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                : evt.severity === 'HIGH'
+                                ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                : 'bg-cyan-950 text-cyan-400 border border-cyan-800'
+                            }`}
+                          >
+                            {evt.severity}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-300 font-medium leading-tight mt-0.5 truncate max-w-[180px]">
+                          {evt.eventType}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="text-right font-mono">
-                    <div className="text-xs font-bold text-cyan-400">{evt.riskScore}/100</div>
-                    <div className="text-[10px] text-slate-500">{evt.timestamp}</div>
+                    <div className="text-right font-mono">
+                      <div className="text-xs font-bold text-cyan-400">{evt.riskScore}/100</div>
+                      <div className="text-[10px] text-slate-500">{evt.timestamp}</div>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Selected Event Detail Panel */}
         <div ref={detailPanelRef} className="lg:col-span-4 rounded-xl border border-slate-800 bg-slate-900/80 p-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-              <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldAlert className="h-4 w-4 text-cyan-400" /> EVENT DEEP DIVE
-              </span>
-              <span className="text-xs font-mono text-slate-400">{selectedEvent.id}</span>
+          {selectedEvent ? (
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldAlert className="h-4 w-4 text-cyan-400" /> EVENT DEEP DIVE
+                </span>
+                <span className="text-xs font-mono text-slate-400">{selectedEvent.id}</span>
+              </div>
+
+              <div className="space-y-3 font-mono text-xs">
+                <div>
+                  <span className="text-slate-500 text-[10px] block uppercase">Threat Event Type</span>
+                  <span className="text-white font-bold text-sm">{selectedEvent.eventType}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
+                    <span className="text-slate-500 text-[10px] block">SOURCE IP</span>
+                    <span className="text-cyan-400 font-bold">{selectedEvent.sourceIp}</span>
+                  </div>
+                  <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
+                    <span className="text-slate-500 text-[10px] block">TARGET ASSET</span>
+                    <span className="text-indigo-400 font-bold truncate block">{selectedEvent.target}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-slate-400">Risk Score Impact</span>
+                    <span className="font-bold text-cyan-400">{selectedEvent.riskScore} / 100</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-rose-500 transition-all duration-500"
+                      style={{ width: `${selectedEvent.riskScore}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-
-            <div className="space-y-3 font-mono text-xs">
-              <div>
-                <span className="text-slate-500 text-[10px] block uppercase">Threat Classification</span>
-                <span className="text-white font-bold text-sm">{selectedEvent.type}</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 text-[10px] block">SOURCE IP</span>
-                  <span className="text-cyan-400 font-bold">{selectedEvent.sourceIp}</span>
-                </div>
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 text-[10px] block">TARGET NODE</span>
-                  <span className="text-indigo-400 font-bold">{selectedEvent.target}</span>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-slate-400">Risk Score Assessment</span>
-                  <span className="font-bold text-cyan-400">{selectedEvent.riskScore} / 100</span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-rose-500 transition-all duration-500"
-                    style={{ width: `${selectedEvent.riskScore}%` }}
-                  />
-                </div>
-              </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-center text-xs text-slate-500 font-mono">
+              Select an activity log item to inspect deep-dive record context.
             </div>
-          </div>
+          )}
 
           <div className="pt-4 border-t border-slate-800 mt-4 flex items-center justify-between">
             <span className="text-[11px] text-slate-400 flex items-center gap-1">
               <Lock className="h-3 w-3 text-cyan-400" /> Audited in Postgres DB
             </span>
             <a
-              href="/dashboard/investigate"
+              href="/dashboard/events"
               className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 group"
             >
-              Investigate Node <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+              Event Explorer <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
             </a>
           </div>
         </div>

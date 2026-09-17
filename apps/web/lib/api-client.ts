@@ -213,3 +213,18 @@ export async function revokeIngestionCredential(id: string) {
   });
 }
 
+export async function getDashboardActivity(signal?: AbortSignal) {
+  return apiRequest<any[]>('/dashboard/activity', { signal });
+}
+
+export async function getDashboardPosture() {
+  return apiRequest<any>('/dashboard/posture');
+}
+
+export async function getDashboardIngestionMetrics() {
+  return apiRequest<any>('/dashboard/ingestion');
+}
+
+export async function getAuthMe() {
+  return apiRequest<any>('/auth/me');
+}

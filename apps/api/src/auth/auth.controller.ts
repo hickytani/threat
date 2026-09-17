@@ -85,6 +85,12 @@ export class AuthController {
     return this.authService.getSessionInfo(user.id);
   }
 
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getMe(@CurrentUser() user: any) {
+    return this.authService.getSessionInfo(user.id);
+  }
+
   private setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
     const isProd = process.env.NODE_ENV === 'production';
 

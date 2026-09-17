@@ -308,6 +308,10 @@ export class AssetsService extends TenantScopedRepository {
     const updateData: Prisma.AssetUpdateInput = {};
     if (data.hostname !== undefined) updateData.hostname = data.hostname;
     if (data.displayName !== undefined) updateData.displayName = data.displayName;
+    if (data.ipAddress !== undefined) updateData.ipAddress = data.ipAddress;
+    if (data.type !== undefined) updateData.type = data.type as AssetType;
+    if (data.environment !== undefined) updateData.environment = data.environment as Environment;
+    if (data.isInternetFacing !== undefined) updateData.isInternetFacing = Boolean(data.isInternetFacing);
     if (data.businessCriticality !== undefined) updateData.businessCriticality = data.businessCriticality as AssetCriticality;
     if (data.monitoringStatus !== undefined) updateData.monitoringStatus = data.monitoringStatus;
     if (data.owner !== undefined) updateData.owner = data.owner;
