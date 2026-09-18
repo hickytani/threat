@@ -3,6 +3,7 @@ import { PrismaService } from '../common/prisma.service.js';
 import { AlertSeverity } from '@prisma/client';
 import { CreateNotificationPolicyDto, UpdateNotificationPolicyDto } from './notifications.dto.js';
 import { URL } from 'url';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
 @Injectable()
 export class NotificationsService {
@@ -11,10 +12,11 @@ export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAllPolicies(organizationId: string) {
-    return this.prisma.notificationPolicy.findMany({
+    const policies = await this.prisma.notificationPolicy.findMany({
       where: { organizationId },
       orderBy: { createdAt: 'desc' },
     });
+    return policies.map((policy: any) => this.sanitizePolicy(policy));
   }
 
   async findOnePolicy(organizationId: string, id: string) {
@@ -24,7 +26,7 @@ export class NotificationsService {
     if (!policy) {
       throw new NotFoundException(`Notification policy ${id} not found.`);
     }
-    return policy;
+    return this.sanitizePolicy(policy);
   }
 
   async createPolicy(organizationId: string, dto: CreateNotificationPolicyDto, actorEmail?: string) {
@@ -39,7 +41,7 @@ export class NotificationsService {
         minSeverity: (dto.minSeverity as AlertSeverity) || AlertSeverity.HIGH,
         channelType: dto.channelType || 'WEBHOOK',
         webhookUrl: dto.webhookUrl,
-        secretToken: dto.secretToken || null,
+        secretToken: dto.secretToken ? this.encryptSecret(dto.secretToken) : null,
       },
     });
 
@@ -48,7 +50,7 @@ export class NotificationsService {
       minSeverity: policy.minSeverity,
     });
 
-    return policy;
+    return this.sanitizePolicy(policy);
   }
 
   async updatePolicy(organizationId: string, id: string, dto: UpdateNotificationPolicyDto, actorEmail?: string) {
@@ -67,7 +69,7 @@ export class NotificationsService {
         minSeverity: dto.minSeverity as AlertSeverity,
         channelType: dto.channelType,
         webhookUrl: dto.webhookUrl,
-        secretToken: dto.secretToken,
+        secretToken: dto.secretToken ? this.encryptSecret(dto.secretToken) : undefined,
       },
     });
 
@@ -76,7 +78,7 @@ export class NotificationsService {
       isEnabled: updated.isEnabled,
     });
 
-    return updated;
+    return this.sanitizePolicy(updated);
   }
 
   async deletePolicy(organizationId: string, id: string, actorEmail?: string) {
@@ -161,7 +163,7 @@ export class NotificationsService {
 
         // Perform delivery asynchronously
         setImmediate(() => {
-          this.deliverWebhookNotification(delivery.id, policy.secretToken || undefined).catch((err) => {
+          this.deliverWebhookNotification(delivery.id).catch((err) => {
             this.logger.error(`Failed to process webhook delivery ${delivery.id}: ${err.message}`);
           });
         });
@@ -172,7 +174,7 @@ export class NotificationsService {
   /**
    * Outbound Webhook Delivery Execution with SSRF validation and bounds.
    */
-  async deliverWebhookNotification(deliveryId: string, secretToken?: string) {
+  async deliverWebhookNotification(deliveryId: string) {
     const delivery = await this.prisma.notificationDelivery.findUnique({
       where: { id: deliveryId },
     });
@@ -214,8 +216,13 @@ export class NotificationsService {
         'Content-Type': 'application/json',
         'User-Agent': 'ThreatSync-OS-NotificationEngine/2.0',
       };
-      if (secretToken) {
-        headers['X-Notification-Secret'] = secretToken;
+      if (delivery.policyId) {
+        const policy = await this.prisma.notificationPolicy.findUnique({ where: { id: delivery.policyId } });
+        if (policy?.secretToken) {
+          headers['X-Notification-Secret'] = policy.secretToken.startsWith('enc:v1:')
+            ? this.decryptSecret(policy.secretToken)
+            : policy.secretToken;
+        }
       }
 
       const response = await fetch(delivery.destinationUrl, {
@@ -381,5 +388,40 @@ export class NotificationsService {
         newValues: (newValues || {}) as any,
       },
     });
+  }
+
+  private sanitizePolicy(policy: any) {
+    const copy = { ...policy };
+    delete copy.secretToken;
+    return copy;
+  }
+
+  private encryptionKey() {
+    const secret = process.env.INTEGRATION_ENCRYPTION_KEY || process.env.SESSION_SECRET || process.env.JWT_SECRET;
+    if (!secret) {
+      throw new BadRequestException('Notification secret encryption is not configured. Set INTEGRATION_ENCRYPTION_KEY or SESSION_SECRET.');
+    }
+    return createHash('sha256').update(secret).digest();
+  }
+
+  private encryptSecret(secret: string) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', this.encryptionKey(), iv);
+    const ciphertext = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `enc:v1:${iv.toString('base64url')}:${tag.toString('base64url')}:${ciphertext.toString('base64url')}`;
+  }
+
+  private decryptSecret(value: string) {
+    const [, version, ivEncoded, tagEncoded, ciphertextEncoded] = value.split(':');
+    if (version !== 'v1' || !ivEncoded || !tagEncoded || !ciphertextEncoded) {
+      throw new BadRequestException('Stored notification secret has an invalid format.');
+    }
+    const decipher = createDecipheriv('aes-256-gcm', this.encryptionKey(), Buffer.from(ivEncoded, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tagEncoded, 'base64url'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(ciphertextEncoded, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
   }
 }

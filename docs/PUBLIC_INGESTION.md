@@ -1,6 +1,6 @@
 # ThreatSync OS — Public Telemetry Ingestion API Specification
 
-ThreatSync OS provides a real-time telemetry ingestion pipeline backed by PostgreSQL, BullMQ, and Redis. All fields in this document are derived from the actual `IngestEventDto` and `EventPipelineService` implementation.
+ThreatSync OS provides a telemetry ingestion pipeline backed by PostgreSQL, BullMQ, and Redis. Dashboard refresh is polling-based; this API does not claim live streaming. All fields in this document are derived from the actual `IngestEventDto` and `EventPipelineService` implementation.
 
 ---
 
@@ -55,12 +55,19 @@ All fields are optional except where noted by your detection rules.
 {
   "eventType": "EDR_PROCESS_SPAWN",
   "source": "CrowdStrike_Falcon",
+  "sourceType": "EDR",
+  "vendor": "CrowdStrike",
+  "product": "Falcon",
+  "eventCategory": "execution",
   "action": "PROCESS_EXECUTION",
   "outcome": "SUCCESS",
   "severity": "HIGH",
   "message": "Suspicious process cmd.exe spawned by powershell.exe",
   "hostname": "workstation-01.internal",
   "ipAddress": "10.0.1.105",
+  "sourcePort": 51432,
+  "destinationPort": 443,
+  "protocol": "TCP",
   "userIdentity": "CORP\\jsmith",
   "idempotencyKey": "evt_unique_hash_98231",
   "rawJson": "{\"process_id\": 4012, \"command_line\": \"powershell -enc ...\"}",
@@ -78,12 +85,17 @@ All fields are optional except where noted by your detection rules.
 | :--- | :--- | :--- | :--- |
 | `eventType` | String | Recommended | Event classifier. Examples: `EDR_PROCESS_SPAWN`, `AWS_CLOUDTRAIL_EVENT`, `FIREWALL_LOG`, `OKTA_AUTH_AUDIT`, `ENDPOINT_ANOMALY`. Used in detection rule matching. |
 | `source` | String | Recommended | Originating system name, e.g. `CrowdStrike_Falcon`, `Sysmon`, `Palo Alto`. |
+| `sourceType` | String | No | Source class such as `EDR`, `FIREWALL`, `IAM`, or `CLOUD_AUDIT`. |
+| `vendor` / `product` | String | No | Provider provenance retained as normalized queryable fields. |
+| `eventCategory` | String | No | Broad event category such as `authentication`, `execution`, or `network`. |
 | `action` | String | No | Observed action, e.g. `PROCESS_EXECUTION`, `NETWORK_CONNECT`, `FILE_CREATE`. Defaults to `PROCESS_AUDIT`. |
 | `outcome` | String | No | Result of the action: `SUCCESS`, `FAILURE`, `BLOCKED`, `UNKNOWN`. Defaults to `UNKNOWN`. |
 | `severity` | String | No | Sender-reported severity: `INFORMATIONAL`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`. Defaults to `LOW`. |
 | `message` | String | No | Human-readable log summary. |
 | `hostname` | String | No | Hostname of the originating asset. Used for automatic asset resolution and registration. |
 | `ipAddress` | String | No | Source IP address of the originating host. |
+| `sourcePort` / `destinationPort` | Integer | No | Network ports when present in the source event. |
+| `protocol` | String | No | Network protocol when present. |
 | `userIdentity` | String | No | User account involved in the event. |
 | `idempotencyKey` | String | No | Unique deduplication key. If submitted within 5 minutes of an identical key, the event is marked duplicate and no new alert is generated. |
 | `rawJson` | String | No | Full raw log line or serialized JSON telemetry payload. |
@@ -94,7 +106,7 @@ All fields are optional except where noted by your detection rules.
 
 ## Duplicate Handling
 
-- A sliding-window deduplication check runs on `idempotencyKey` (exact match) and on `(eventType, source, hostname)` within a 5-minute window.
+- A sliding-window deduplication check runs on `idempotencyKey` (exact match) and on the normalized `(eventType, source, action, outcome, message)` tuple within a 5-minute window.
 - Duplicate events are stored in the audit log but **do not** generate new alerts.
 - The sync ingestion response indicates `"deduplicated": true` when a duplicate is detected.
 

@@ -1,4 +1,4 @@
-import { IsObject, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsInt, IsNumber, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class IngestEventDto {
   @IsOptional()
@@ -7,7 +7,23 @@ export class IngestEventDto {
 
   @IsOptional()
   @IsString()
+  eventCategory?: string;
+
+  @IsOptional()
+  @IsString()
   source?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceType?: string;
+
+  @IsOptional()
+  @IsString()
+  vendor?: string;
+
+  @IsOptional()
+  @IsString()
+  product?: string;
 
   @IsOptional()
   @IsString()
@@ -22,6 +38,10 @@ export class IngestEventDto {
   severity?: string;
 
   @IsOptional()
+  @IsNumber()
+  confidence?: number;
+
+  @IsOptional()
   @IsString()
   @MinLength(1)
   message?: string;
@@ -33,6 +53,18 @@ export class IngestEventDto {
   @IsOptional()
   @IsString()
   ipAddress?: string;
+
+  @IsOptional()
+  @IsInt()
+  sourcePort?: number;
+
+  @IsOptional()
+  @IsInt()
+  destinationPort?: number;
+
+  @IsOptional()
+  @IsString()
+  protocol?: string;
 
   @IsOptional()
   @IsString()

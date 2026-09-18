@@ -6,10 +6,18 @@ import { AlertSeverity, AlertStatus, AssetCriticality, AssetType, Environment, P
 
 export interface IngestEventInput {
   eventType?: string;
+  eventCategory?: string;
   source?: string;
+  sourceType?: string;
+  vendor?: string;
+  product?: string;
   action?: string;
   outcome?: string;
   severity?: string;
+  confidence?: number;
+  sourcePort?: number;
+  destinationPort?: number;
+  protocol?: string;
   message?: string;
   hostname?: string;
   metadata?: Record<string, any>;
@@ -111,16 +119,34 @@ export class EventPipelineService {
       data: {
         organizationId,
         timestamp: normalizedEvent.timestamp,
+        ingestionTimestamp: new Date(),
         eventType: normalizedEvent.eventType,
+        eventCategory: normalizedEvent.metadata?.eventCategory || null,
         source: normalizedEvent.source,
+        sourceType: normalizedEvent.metadata?.sourceType || null,
+        vendor: normalizedEvent.metadata?.vendor || null,
+        product: normalizedEvent.metadata?.product || null,
         assetId: normalizedEvent.assetId,
+        hostname: normalizedEvent.metadata?.hostname || null,
         userIdentity: normalizedEvent.metadata?.userIdentity || null,
         sourceIp: normalizedEvent.sourceIp || null,
+        sourcePort: normalizedEvent.metadata?.sourcePort || null,
         destinationIp: normalizedEvent.destinationIp || null,
+        destinationPort: normalizedEvent.metadata?.destinationPort || null,
+        protocol: normalizedEvent.metadata?.protocol || null,
         action: normalizedEvent.action,
         outcome: normalizedEvent.outcome,
         severity: normalizedEvent.severity,
+        confidence: normalizedEvent.metadata?.confidence ?? 0,
         message: normalizedEvent.message,
+        processName: normalizedEvent.metadata?.processName || null,
+        processId: normalizedEvent.metadata?.processId || null,
+        parentProcess: normalizedEvent.metadata?.parentProcess || null,
+        commandLine: normalizedEvent.metadata?.commandLine || null,
+        fileHash: normalizedEvent.metadata?.fileHash || null,
+        domain: normalizedEvent.metadata?.domain || null,
+        url: normalizedEvent.metadata?.url || null,
+        userAgent: normalizedEvent.metadata?.userAgent || null,
         metadata: normalizedEvent.metadata as any,
         rawJson: normalizedEvent.rawJson,
       },
@@ -242,6 +268,14 @@ export class EventPipelineService {
 
     const metadata = {
       ...(input.metadata || {}),
+      eventCategory: input.eventCategory || input.metadata?.eventCategory,
+      sourceType: input.sourceType || input.metadata?.sourceType,
+      vendor: input.vendor || input.metadata?.vendor,
+      product: input.product || input.metadata?.product,
+      confidence: input.confidence ?? input.metadata?.confidence,
+      sourcePort: input.sourcePort ?? input.metadata?.sourcePort,
+      destinationPort: input.destinationPort ?? input.metadata?.destinationPort,
+      protocol: input.protocol || input.metadata?.protocol,
       hostname: hostname || undefined,
     };
 
@@ -321,6 +355,7 @@ export class EventPipelineService {
             ruleName: rule.name,
             source: event.source,
             matchedConditions: rule.matchConditions || {},
+            matchedEvidence: this.buildMatchedEvidence((rule.matchConditions || {}) as Record<string, any>, event),
             metadata: event.metadata,
             requestId: context?.requestId,
             correlationId: context?.correlationId,
@@ -428,19 +463,90 @@ export class EventPipelineService {
       if (key === 'metadata' && typeof expectedValue === 'object' && expectedValue) {
         const nestedMetadata = expectedValue as Record<string, any>;
         for (const [nestedKey, nestedExpectedValue] of Object.entries(nestedMetadata)) {
-          if (event.metadata?.[nestedKey] !== nestedExpectedValue) {
+          if (!this.compareCondition(event.metadata?.[nestedKey], nestedExpectedValue)) {
             return false;
           }
         }
         continue;
       }
 
-      if ((event as any)[key] !== expectedValue) {
+      if (!this.compareCondition(this.getEventValue(event, key), expectedValue)) {
         return false;
       }
     }
 
     return true;
+  }
+
+  private getEventValue(event: NormalizedEvent, key: string) {
+    return (event as any)[key] ?? event.metadata?.[key];
+  }
+
+  private compareCondition(actual: any, expected: any): boolean {
+    if (expected && typeof expected === 'object' && !Array.isArray(expected) && expected.operator) {
+      const operator = String(expected.operator).toUpperCase();
+      const expectedValue = expected.value;
+      const actualText = String(actual ?? '').toLowerCase();
+      const expectedText = String(expectedValue ?? '').toLowerCase();
+
+      switch (operator) {
+        case 'EQUALS':
+        case 'EQ':
+          return actualText === expectedText;
+        case 'NOT_EQUALS':
+        case 'NEQ':
+          return actualText !== expectedText;
+        case 'CONTAINS':
+        case 'LIKE':
+          return actualText.includes(expectedText);
+        case 'STARTS_WITH':
+          return actualText.startsWith(expectedText);
+        case 'ENDS_WITH':
+          return actualText.endsWith(expectedText);
+        case 'IN':
+          return Array.isArray(expectedValue) && expectedValue.some((value) => this.compareCondition(actual, value));
+        case 'NOT_IN':
+          return Array.isArray(expectedValue) && !expectedValue.some((value) => this.compareCondition(actual, value));
+        case 'EXISTS':
+          return expectedValue ? actual !== undefined && actual !== null && actual !== '' : actual === undefined || actual === null || actual === '';
+        case 'GREATER_THAN':
+        case 'GT':
+          return Number.isFinite(Number(actual)) && Number(actual) > Number(expectedValue);
+        case 'LESS_THAN':
+        case 'LT':
+          return Number.isFinite(Number(actual)) && Number(actual) < Number(expectedValue);
+        case 'REGEX':
+          if (typeof expectedValue !== 'string' || expectedValue.length > 256) return false;
+          try {
+            return new RegExp(expectedValue, 'i').test(String(actual ?? ''));
+          } catch {
+            return false;
+          }
+        default:
+          return false;
+      }
+    }
+
+    if (Array.isArray(expected)) {
+      return expected.some((value) => this.compareCondition(actual, value));
+    }
+
+    if (typeof actual === 'string' && typeof expected === 'string') {
+      return actual.toLowerCase() === expected.toLowerCase();
+    }
+
+    return actual === expected;
+  }
+
+  private buildMatchedEvidence(conditions: Record<string, any>, event: NormalizedEvent) {
+    return Object.fromEntries(
+      Object.keys(conditions).map((key) => [
+        key,
+        key === 'metadata'
+          ? Object.fromEntries(Object.keys(conditions.metadata || {}).map((nestedKey) => [nestedKey, this.getEventValue(event, nestedKey)]))
+          : this.getEventValue(event, key),
+      ]),
+    );
   }
 
   private calculateAlertConfidence(rule: any, event: NormalizedEvent): number {

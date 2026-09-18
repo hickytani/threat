@@ -47,7 +47,7 @@ export class QueueWorker implements OnModuleInit, OnModuleDestroy {
     this.ingestionWorker = new Worker(
       'telemetry-ingestion',
       async (job: Job) => {
-        const { organizationId, title, description, severity, category, source, hostname, ipAddress, rawEvent, requestId, correlationId, idempotencyKey } = job.data;
+        const { organizationId, input: queuedInput, title, description, severity, category, source, hostname, ipAddress, rawEvent, requestId, correlationId, idempotencyKey } = job.data;
         const logPrefix = `[req_${requestId || 'none'}] [corr_${correlationId || job.id}]`;
 
         this.logger.log(`${logPrefix} Processing telemetry ingestion job: ${job.id} for host: ${hostname}`);
@@ -66,8 +66,8 @@ export class QueueWorker implements OnModuleInit, OnModuleDestroy {
           throw new UnrecoverableError(`Tenant with ID ${organizationId} does not exist.`);
         }
 
-        const eventId = rawEvent?.eventId || idempotencyKey;
-        const input: IngestEventInput = {
+        const eventId = rawEvent?.eventId || idempotencyKey || queuedInput?.metadata?.eventId;
+        const input: IngestEventInput = queuedInput || {
           eventType: category || rawEvent?.eventType || 'ENDPOINT_ANOMALY',
           source: source || 'TelemetryIngest',
           action: rawEvent?.action || 'PROCESS_AUDIT',

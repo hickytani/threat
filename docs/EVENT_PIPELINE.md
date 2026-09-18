@@ -18,10 +18,11 @@ QUEUE WORKER (QueueWorker)
       │ 1. Validate organizationId against DB (throws UnrecoverableError if invalid)
       │ 2. Check eventId / idempotencyKey (skips duplicate delivery)
       ▼
-ATOMIC PRISMA TRANSACTION ($transaction)
+CANONICAL EVENT PIPELINE
       ├── Resolve or create Asset (hostname, ipAddress, businessCriticality)
-      ├── Create Alert (title, severity, category, detectionRuleId, rawEvent)
-      └── Increment Asset activeAlertCount
+      ├── Persist normalized SecurityEvent plus raw JSON
+      ├── Create Alert (title, severity, category, detectionRuleId, matched evidence)
+      └── Update Asset risk after alert generation
       │
       ▼
 CORRELATION ENGINE (CorrelationService)
@@ -35,6 +36,25 @@ INCIDENT & AUDIT RECORD CREATION
       ├── Create or update correlated Incident
       └── Create AuditLog entry with requestId and correlationId
 ```
+
+## Canonical Event Contract
+
+Every source follows the same boundary:
+
+```text
+RAW EVENT
+      -> CONNECTOR PARSER
+      -> NORMALIZATION (provenance, identity, network, process, IOC fields)
+      -> VALIDATION
+      -> DEDUPLICATION
+      -> PERSISTENCE (normalized columns plus immutable raw JSON)
+      -> DETECTION
+      -> CORRELATION
+      -> RISK
+      -> ALERT / INCIDENT / AUDIT
+```
+
+`SecurityEvent.ingestionTimestamp` records when ThreatSync accepted the event; `timestamp` remains the source event time. Source-specific details remain in `metadata` and `rawJson`, while common investigation fields are queryable columns. Sync HTTP ingestion and BullMQ worker ingestion carry the same `IngestEventInput` contract through `EventPipelineService.processEvent()`.
 
 ## Detection Rules & Risk Scoring
 - **Rule Matching**: Evaluates event properties (`eventType`, `category`, `outcome`, `metadata`) against active tenant `DetectionRule` records.

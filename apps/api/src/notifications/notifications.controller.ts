@@ -18,6 +18,9 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
 import { CurrentMember } from '../auth/current-member.decorator.js';
 import type { ActiveMember, AuthenticatedRequest } from '../auth/auth.interface.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { UserRole } from 'shared-types';
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -37,6 +40,8 @@ export class NotificationsController {
   }
 
   @Post('policies')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole, 'SOC_MANAGER' as UserRole)
   @HttpCode(HttpStatus.CREATED)
   async createPolicy(
     @CurrentMember() member: ActiveMember,
@@ -48,6 +53,8 @@ export class NotificationsController {
   }
 
   @Patch('policies/:id')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole, 'SOC_MANAGER' as UserRole)
   @HttpCode(HttpStatus.OK)
   async updatePolicy(
     @CurrentMember() member: ActiveMember,
@@ -60,6 +67,8 @@ export class NotificationsController {
   }
 
   @Delete('policies/:id')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole, 'SOC_MANAGER' as UserRole)
   @HttpCode(HttpStatus.OK)
   async deletePolicy(
     @CurrentMember() member: ActiveMember,

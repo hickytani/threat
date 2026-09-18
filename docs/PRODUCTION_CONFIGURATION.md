@@ -14,6 +14,7 @@ This document is the authoritative specification of every environment variable r
 | `JWT_SECRET` | 32 chars | Signs access tokens. Must not contain: `secret`, `password`, `default`, `change_in_production`. |
 | `JWT_REFRESH_SECRET` | 32 chars | Signs refresh tokens. Alias: `REFRESH_TOKEN_SECRET`. Must not reuse `JWT_SECRET` value. |
 | `SESSION_SECRET` | 16 chars | Cookie session protection. Must not contain weak keywords. |
+| `INTEGRATION_ENCRYPTION_KEY` | 32 chars recommended | Encrypts integration webhook credentials at rest. Falls back to `SESSION_SECRET` or `JWT_SECRET` when omitted. |
 | `FRONTEND_URL` | — | Exact origin of the Next.js frontend, e.g. `https://app.threatsync.io`. Controls CORS. Alias: `WEB_PUBLIC_URL`. |
 | `NEXT_PUBLIC_API_URL` | — | Public API base URL baked into the Next.js build, e.g. `https://api.threatsync.io/api/v1`. **Set at BUILD TIME.** |
 

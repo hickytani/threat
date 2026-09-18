@@ -147,4 +147,54 @@ describe('EventPipelineService (Canonical Domain Engine)', () => {
     expect(prismaMock.alert.create).not.toHaveBeenCalled();
     expect(result.alertsCreated).toHaveLength(0);
   });
+
+  it('evaluates operator conditions and records matched evidence', async () => {
+    prismaMock.detectionRule.findMany.mockResolvedValueOnce([
+      {
+        id: 'rule-powershell',
+        organizationId: 'org-test',
+        name: 'PowerShell Execution',
+        category: 'ENDPOINT_ANOMALY',
+        severity: 'HIGH',
+        isEnabled: true,
+        matchConditions: {
+          eventType: { operator: 'EQUALS', value: 'PROCESS_EXECUTION' },
+          metadata: {
+            processName: { operator: 'ENDS_WITH', value: '.exe' },
+            confidence: { operator: 'GREATER_THAN', value: 70 },
+          },
+        },
+      },
+    ]);
+
+    await pipeline.processEvent({
+      organizationId: 'org-test',
+      input: {
+        eventType: 'PROCESS_EXECUTION',
+        source: 'EDR',
+        severity: 'HIGH',
+        message: 'PowerShell execution',
+        metadata: {
+          processName: 'powershell.exe',
+          confidence: 85,
+        },
+      },
+    });
+
+    expect(prismaMock.alert.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawEvent: expect.objectContaining({
+            matchedEvidence: {
+              eventType: 'PROCESS_EXECUTION',
+              metadata: {
+                processName: 'powershell.exe',
+                confidence: 85,
+              },
+            },
+          }),
+        }),
+      }),
+    );
+  });
 });

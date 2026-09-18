@@ -5,6 +5,7 @@ describe('NotificationsService — SSRF Protection Guard & Delivery Test', () =>
   let prismaMock: any;
 
   beforeEach(() => {
+    process.env.INTEGRATION_ENCRYPTION_KEY = 'notification-test-key-that-is-long-enough';
     prismaMock = {
       notificationPolicy: {
         findMany: jest.fn(),
@@ -24,6 +25,30 @@ describe('NotificationsService — SSRF Protection Guard & Delivery Test', () =>
       },
     };
     service = new NotificationsService(prismaMock);
+  });
+
+  afterEach(() => {
+    delete process.env.INTEGRATION_ENCRYPTION_KEY;
+  });
+
+  it('encrypts policy secrets and omits them from policy responses', async () => {
+    prismaMock.notificationPolicy.create.mockResolvedValue({
+      id: 'policy_secure_01',
+      organizationId: 'org_01',
+      name: 'High severity webhook',
+      secretToken: 'enc:v1:stored',
+    });
+
+    const result = await service.createPolicy('org_01', {
+      name: 'High severity webhook',
+      webhookUrl: 'https://hooks.example.test/security',
+      secretToken: 'notification-secret',
+    });
+
+    const persisted = prismaMock.notificationPolicy.create.mock.calls[0][0].data;
+    expect(persisted.secretToken).toMatch(/^enc:v1:/);
+    expect(persisted.secretToken).not.toBe('notification-secret');
+    expect(result.secretToken).toBeUndefined();
   });
 
   describe('SSRF Protection Guard (Target URL Host Validation)', () => {

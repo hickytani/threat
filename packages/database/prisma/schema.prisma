@@ -416,21 +416,39 @@ model AssetVulnerability {
 
 // Security Event (SIEM logs) Model
 model SecurityEvent {
-  id             String        @id @default(uuid())
-  organizationId String
-  timestamp      DateTime      @default(now())
-  eventType      String
-  source         String
-  assetId        String?
-  userIdentity   String?
-  sourceIp       String?
-  destinationIp  String?
-  action         String
-  outcome        String        @default("UNKNOWN") // SUCCESS, FAILURE, BLOCKED, UNKNOWN
-  severity       AlertSeverity @default(LOW)
-  message        String
-  metadata       Json          @default("{}")      // Actual Postgres JSONB payload
-  rawJson        String
+  id                String        @id @default(uuid())
+  organizationId    String
+  timestamp         DateTime      @default(now())
+  ingestionTimestamp DateTime      @default(now())
+  eventType         String
+  eventCategory     String?
+  source            String
+  sourceType        String?
+  vendor            String?
+  product           String?
+  assetId           String?
+  hostname          String?
+  userIdentity      String?
+  sourceIp          String?
+  sourcePort        Int?
+  destinationIp     String?
+  destinationPort   Int?
+  protocol          String?
+  action            String
+  outcome           String        @default("UNKNOWN") // SUCCESS, FAILURE, BLOCKED, UNKNOWN
+  severity          AlertSeverity @default(LOW)
+  confidence        Float         @default(0.0)
+  message           String
+  processName       String?
+  processId         String?
+  parentProcess     String?
+  commandLine       String?
+  fileHash          String?
+  domain            String?
+  url               String?
+  userAgent         String?
+  metadata          Json          @default("{}")      // Actual Postgres JSONB payload
+  rawJson           String
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -438,6 +456,10 @@ model SecurityEvent {
   @@index([organizationId, assetId])
   @@index([organizationId, eventType])
   @@index([organizationId, sourceIp])
+  @@index([organizationId, vendor, product])
+  @@index([organizationId, ingestionTimestamp])
+  @@index([organizationId, domain])
+  @@index([organizationId, fileHash])
   @@index([timestamp])
 }
 

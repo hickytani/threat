@@ -10,10 +10,18 @@ import { CorrelationService } from '../queues/correlation.service.js';
 
 export interface IngestEventInput {
   eventType?: string;
+  eventCategory?: string;
   source?: string;
+  sourceType?: string;
+  vendor?: string;
+  product?: string;
   action?: string;
   outcome?: string;
   severity?: string;
+  confidence?: number;
+  sourcePort?: number;
+  destinationPort?: number;
+  protocol?: string;
   message?: string;
   hostname?: string;
   metadata?: Record<string, any>;
@@ -62,6 +70,7 @@ export class EventsService extends TenantScopedRepository {
 
     return this.queueService.addTelemetryJob({
       organizationId: this.organizationId,
+      input,
       title: input.message || `Telemetry Event: ${input.eventType || 'UNKNOWN'}`,
       description: `Ingested asynchronously via queue pipeline from ${input.source || 'agent'}`,
       severity: input.severity || 'LOW',

@@ -279,6 +279,58 @@ describe('Production Queue Hardening Specification', () => {
         }),
       );
     });
+
+    it('should preserve the canonical event input across async queue processing', async () => {
+      const processor = (queueWorker as any).ingestionWorker.opts.processor;
+
+      prismaMock.securityEvent.findFirst.mockResolvedValue(null);
+      prismaMock.securityEvent.create.mockResolvedValue({ id: 'sevt_rich_async' });
+      prismaMock.asset.findFirst.mockResolvedValue({ id: 'ast_rich', hostname: 'host-rich' });
+      prismaMock.detectionRule.findMany.mockResolvedValue([]);
+
+      await processor({
+        id: 'job_rich_async',
+        data: {
+          organizationId: 'org_valid',
+          input: {
+            eventType: 'PROCESS_EXECUTION',
+            source: 'EDR',
+            action: 'EXECUTE',
+            outcome: 'FAILURE',
+            severity: 'HIGH',
+            message: 'Blocked credential dumping attempt',
+            hostname: 'host-rich',
+            metadata: {
+              sourceIp: '198.51.100.44',
+              userIdentity: 'analyst@example.test',
+              domain: 'example.test',
+              processName: 'powershell.exe',
+              idempotencyKey: 'rich-async-1',
+            },
+            rawEvent: { providerEventId: 'provider-1' },
+          },
+          requestId: 'req_rich_async',
+          correlationId: 'corr_rich_async',
+        },
+      });
+
+      expect(prismaMock.securityEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            eventType: 'PROCESS_EXECUTION',
+            action: 'EXECUTE',
+            outcome: 'FAILURE',
+            sourceIp: '198.51.100.44',
+            userIdentity: 'analyst@example.test',
+            metadata: expect.objectContaining({
+              domain: 'example.test',
+              processName: 'powershell.exe',
+            }),
+            rawJson: JSON.stringify({ providerEventId: 'provider-1' }),
+          }),
+        }),
+      );
+    });
   });
 
   describe('5. Health Readiness Boundaries', () => {

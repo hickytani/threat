@@ -10,6 +10,7 @@ describe('IntegrationsService', () => {
   let connectorFactory: ConnectorFactory;
 
   beforeEach(() => {
+    process.env.INTEGRATION_ENCRYPTION_KEY = 'integration-test-key-that-is-long-enough';
     prismaMock = {
       integration: {
         findMany: jest.fn(),
@@ -45,6 +46,39 @@ describe('IntegrationsService', () => {
     connectorFactory = new ConnectorFactory(webhookConnector, awsConnector);
 
     service = new IntegrationsService(prismaMock, eventPipelineMock, connectorFactory);
+  });
+
+  afterEach(() => {
+    delete process.env.INTEGRATION_ENCRYPTION_KEY;
+  });
+
+  it('encrypts integration secrets at rest and never exposes them in sanitized responses', async () => {
+    const created = {
+      id: 'int_secure_01',
+      organizationId: 'org_01',
+      name: 'Secure Webhook',
+      type: 'WEBHOOK',
+      isEnabled: true,
+      status: 'ACTIVE',
+      configuration: { fieldMap: {} },
+      encryptedCredentials: 'enc:v1:stored',
+    };
+    prismaMock.integration.create.mockResolvedValue(created);
+
+    const result = await service.create('org_01', {
+      name: 'Secure Webhook',
+      type: 'WEBHOOK',
+      configuration: { secret: 'caller-secret', fieldMap: {} },
+    });
+
+    const persisted = prismaMock.integration.create.mock.calls[0][0].data;
+    expect(persisted.encryptedCredentials).toMatch(/^enc:v1:/);
+    expect(persisted.encryptedCredentials).not.toContain('whsec_');
+    expect(persisted.configuration.webhookSecret).toBeUndefined();
+    expect(persisted.configuration.secret).toBeUndefined();
+    expect(result.configuration.webhookSecret).toBeUndefined();
+    expect(result.encryptedCredentials).toBeUndefined();
+    expect(result.secretToken).toMatch(/^whsec_/);
   });
 
   it('normalizes incoming vendor webhook payload and passes to EventPipelineService', async () => {

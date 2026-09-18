@@ -9,7 +9,7 @@ import { PrismaService } from '../common/prisma.service.js';
 import { EventPipelineService } from '../events/event-pipeline.service.js';
 import { ConnectorFactory } from './connectors/connector.factory.js';
 import { CreateIntegrationDto, UpdateIntegrationDto } from './integrations.dto.js';
-import { randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
 @Injectable()
 export class IntegrationsService {
@@ -70,6 +70,8 @@ export class IntegrationsService {
       webhookSecret,
       ...(dto.configuration || {}),
     };
+    delete (defaultConfig as any).webhookSecret;
+    delete (defaultConfig as any).secret;
 
     let created: any;
     try {
@@ -84,7 +86,7 @@ export class IntegrationsService {
           eventCount: 0,
           errorCount: 0,
           configuration: JSON.parse(JSON.stringify(defaultConfig)),
-          encryptedCredentials: webhookSecret,
+          encryptedCredentials: this.encryptSecret(webhookSecret),
         },
       });
     } catch (err: any) {
@@ -131,6 +133,8 @@ export class IntegrationsService {
       ...((existing.configuration as any) || {}),
       ...(dto.configuration || {}),
     };
+    delete (updatedConfig as any).webhookSecret;
+    delete (updatedConfig as any).secret;
 
     const isEnabled = dto.isEnabled !== undefined ? dto.isEnabled : existing.isEnabled;
     const nextStatus = dto.status !== undefined ? dto.status : isEnabled ? 'ACTIVE' : 'PAUSED';
@@ -175,17 +179,16 @@ export class IntegrationsService {
 
     const newSecret = `whsec_${randomBytes(24).toString('hex')}`;
     const currentConfig = (existing.configuration as any) || {};
+    delete currentConfig.webhookSecret;
+    delete currentConfig.secret;
 
     const updated = await this.prisma.integration.update({
       where: { id },
       data: {
-        encryptedCredentials: newSecret,
+        encryptedCredentials: this.encryptSecret(newSecret),
         status: 'ACTIVE',
         health: 'OK',
-        configuration: {
-          ...currentConfig,
-          webhookSecret: newSecret,
-        } as any,
+        configuration: currentConfig as any,
       },
     });
 
@@ -315,13 +318,32 @@ export class IntegrationsService {
       },
     });
 
+    const incidentsGenerated = this.prisma.incident?.count
+      ? await this.prisma.incident.count({
+          where: {
+            organizationId,
+            alerts: { some: { source: integration.name } },
+          },
+        })
+      : 0;
+
+    const deduplicatedEvents = this.prisma.auditLog?.count
+      ? await this.prisma.auditLog.count({
+          where: {
+            organizationId,
+            action: 'EVENT_INGESTION_DUPLICATE',
+            newValues: { path: ['integrationId'], equals: id },
+          },
+        })
+      : 0;
+
     return {
       totalEvents: totalEvents || integration.eventCount || 0,
       eventsLast24h,
       eventsLastHour,
       alertsGenerated,
-      incidentsGenerated: 0,
-      deduplicatedEvents: 0,
+      incidentsGenerated,
+      deduplicatedEvents,
       errorCount: integration.errorCount || 0,
       health: integration.health || 'OK',
       status: integration.status || 'ACTIVE',
@@ -428,7 +450,8 @@ export class IntegrationsService {
       throw new BadRequestException(`Webhook integration ${integration.name} is disabled or disconnected.`);
     }
 
-    const expectedSecret = integration.encryptedCredentials || (integration.configuration as any)?.webhookSecret;
+    const storedSecret = integration.encryptedCredentials || (integration.configuration as any)?.webhookSecret;
+    const expectedSecret = storedSecret?.startsWith('enc:v1:') ? this.decryptSecret(storedSecret) : storedSecret;
 
     if (expectedSecret && providedSecret !== expectedSecret) {
       await this.prisma.integration.update({
@@ -521,14 +544,42 @@ export class IntegrationsService {
     delete copy.encryptedCredentials;
 
     if (copy.configuration && copy.configuration.webhookSecret) {
-      const sec = copy.configuration.webhookSecret;
       copy.configuration = {
         ...copy.configuration,
-        webhookSecret: sec.length > 8 ? `${sec.slice(0, 8)}...` : '***',
       };
+      delete copy.configuration.webhookSecret;
     }
 
     return copy;
+  }
+
+  private encryptionKey() {
+    const secret = process.env.INTEGRATION_ENCRYPTION_KEY || process.env.SESSION_SECRET || process.env.JWT_SECRET;
+    if (!secret) {
+      throw new BadRequestException('Integration secret encryption is not configured. Set INTEGRATION_ENCRYPTION_KEY or SESSION_SECRET.');
+    }
+    return createHash('sha256').update(secret).digest();
+  }
+
+  private encryptSecret(secret: string) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', this.encryptionKey(), iv);
+    const ciphertext = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `enc:v1:${iv.toString('base64url')}:${tag.toString('base64url')}:${ciphertext.toString('base64url')}`;
+  }
+
+  private decryptSecret(value: string) {
+    const [, version, ivEncoded, tagEncoded, ciphertextEncoded] = value.split(':');
+    if (version !== 'v1' || !ivEncoded || !tagEncoded || !ciphertextEncoded) {
+      throw new BadRequestException('Stored integration secret has an invalid format.');
+    }
+    const decipher = createDecipheriv('aes-256-gcm', this.encryptionKey(), Buffer.from(ivEncoded, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tagEncoded, 'base64url'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(ciphertextEncoded, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
   }
 
   private async createAuditLog(

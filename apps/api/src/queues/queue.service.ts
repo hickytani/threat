@@ -2,9 +2,11 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import MockRedis from 'ioredis-mock';
+import type { IngestEventInput } from '../events/event-pipeline.service.js';
 
 export interface TelemetryJobData {
   organizationId: string;
+  input?: IngestEventInput;
   title: string;
   description: string;
   severity: string;
