@@ -13,7 +13,6 @@ import {
   FileCode, 
   Play, 
   Activity,
-  Brain,
   CheckCircle,
   HelpCircle,
   AlertCircle,
@@ -30,10 +29,6 @@ export default function AlertsLedger() {
   const [search, setSearch] = useState('');
   const [severity, setSeverity] = useState('');
   const [status, setStatus] = useState('');
-
-  // AI Assistant Analysis State
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     fetchAlerts();
@@ -65,7 +60,6 @@ export default function AlertsLedger() {
 
   const handleRowClick = async (alert: any) => {
     setSelectedAlert(alert);
-    setAiAnalysis(null); // Clear previous analysis
   };
 
   const handleUpdateStatus = async (alertId: string, newStatus: string) => {
@@ -93,24 +87,6 @@ export default function AlertsLedger() {
     } catch (err: any) {
       alert(`Escalation failed: ${err.message}`);
     }
-  };
-
-  const requestAIPlaybook = async (alert: any) => {
-    setAiLoading(true);
-    setAiAnalysis(null);
-    
-    // Simulate AI request matching our mock engine fallback
-    setTimeout(() => {
-      setAiAnalysis(
-        `### AI Advisory Playbook: ${alert.title}\n\n` +
-        `**Mitigation Steps:**\n` +
-        `1. **Network Containment:** Block source address \`${alert.ipAddress || 'Host Local'}\` at Web Gateway firewalls.\n` +
-        `2. **Credentials Revocation:** Terminate all active sessions for targeted domain accounts inside Okta/ActiveDirectory.\n` +
-        `3. **Forensic Collection:** Extract host security logs (evt-4624 audit tokens) from affected node.\n\n` +
-        `*AI-generated analysis. Analyst verification required before code execution.*`
-      );
-      setAiLoading(false);
-    }, 1200);
   };
 
   return (

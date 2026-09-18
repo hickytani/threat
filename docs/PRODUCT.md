@@ -22,7 +22,7 @@ The current product is an operational alpha: the core domain workflow is real an
 
 ## Explicitly Not Claimed
 
-- No direct SIEM, EDR, syslog, Sentinel, Splunk, CrowdStrike, Defender, Okta, or CloudTrail connector is included.
+- No direct SIEM, EDR, syslog, Sentinel, Splunk, CrowdStrike, Defender, Okta, or AWS-side CloudTrail retrieval connector is included. CloudTrail support is event envelope parsing and normalization over push ingestion.
 - Polling is used for the dashboard; this is not WebSocket or SSE realtime.
 - External VirusTotal and AbuseIPDB responses are not fabricated when providers are unavailable.
 - Billing, SSO/SAML, MFA, email verification, and managed-cloud provisioning are not complete.

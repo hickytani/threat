@@ -183,7 +183,7 @@ export default function IntegrationsPage() {
             <span className="font-mono text-[10px] font-semibold text-cyan-400">READY</span>
           </div>
           <h3 className="mt-3 text-sm font-semibold text-white">AWS CloudTrail</h3>
-          <p className="mt-1 text-xs text-slate-400">Parse AWS audit events from S3, EventBridge or SNS webhooks.</p>
+          <p className="mt-1 text-xs text-slate-400">Parse CloudTrail event envelopes delivered through SNS, EventBridge, or HTTP webhooks.</p>
         </div>
 
         <div className="rounded-xl border border-slate-800/60 bg-slate-900/30 p-5 opacity-60">
