@@ -47,9 +47,9 @@ export default function OnboardingWizard() {
     primaryConcern: 'Ransomware / Data Exfiltration'
   });
 
-  const [assetMethod, setAssetMethod] = useState<'demo' | 'manual'>('demo');
+  const [assetMethod, setAssetMethod] = useState<'demo' | 'manual'>('manual');
   const [manualAssets, setManualAssets] = useState<any[]>([
-    { hostname: 'dc-01.prod.lan', type: 'SERVER', ipAddress: '192.168.1.10', criticality: 'CRITICAL' }
+    { hostname: '', type: 'SERVER', ipAddress: '', criticality: 'MEDIUM' }
   ]);
 
   // Load organization from authenticated session
@@ -176,10 +176,13 @@ export default function OnboardingWizard() {
     }
   };
 
-  const curlCommand = `curl -X POST http://localhost:3001/api/v1/events/ingest \\
+  const apiBase = typeof window !== 'undefined' && process.env.NEXT_PUBLIC_API_URL
+    ? process.env.NEXT_PUBLIC_API_URL
+    : (typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? '/api/v1' : 'http://localhost:3001/api/v1');
+  const curlCommand = `curl -X POST ${apiBase}/events/ingest \\
   -H "Content-Type: application/json" \\
-  -H "X-Ingestion-Token: ${credentialToken || '<TOKEN>'}" \\
-  -d '{"eventType":"ENDPOINT_ANOMALY","source":"Sysmon","message":"Unauthorized privilege escalation detected","hostname":"${manualAssets[0]?.hostname || 'dc-01.prod.lan'}","severity":"HIGH"}'`;
+  -H "Authorization: Bearer ${credentialToken || '<YOUR_TOKEN>'}" \\
+  -d '{"eventType":"ENDPOINT_ANOMALY","source":"AgentIngest","message":"Unauthorized privilege escalation detected","hostname":"${manualAssets[0]?.hostname || 'my-host-01'}","severity":"HIGH"}'`;
 
   return (
     <div className="flex min-h-screen bg-[#030712] text-slate-100 flex-col justify-between">

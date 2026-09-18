@@ -31,6 +31,22 @@ export class IngestEventDto {
   hostname?: string;
 
   @IsOptional()
+  @IsString()
+  ipAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  userIdentity?: string;
+
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+
+  @IsOptional()
+  @IsString()
+  rawJson?: string;
+
+  @IsOptional()
   @IsObject()
   metadata?: Record<string, any>;
 

@@ -9,10 +9,14 @@
   "scripts": {
     "dev:api": "npm run dev --workspace=apps/api",
     "dev:web": "npm run dev --workspace=apps/web",
+    "start:api": "npm run start:prod --workspace=apps/api",
+    "start:worker": "npm run start:worker --workspace=apps/api",
+    "start:web": "npm run start --workspace=apps/web",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "db:generate": "npm run generate --workspace=packages/database",
     "db:push": "npm run push --workspace=packages/database",
+    "db:migrate": "npm run migrate:deploy --workspace=packages/database",
     "db:seed": "npm run seed --workspace=packages/database"
   },
   "devDependencies": {

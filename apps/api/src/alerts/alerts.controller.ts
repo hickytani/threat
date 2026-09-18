@@ -66,6 +66,18 @@ export class AlertsController {
     return this.alertsService.addComment(alertId, content, userId, authorName);
   }
 
+  @Post(':alertId/notes')
+  @HttpCode(HttpStatus.CREATED)
+  async addNote(
+    @Param('alertId') alertId: string,
+    @Body('content') content: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user?.id || '';
+    const authorName = req.user?.fullName || 'SOC Analyst';
+    return this.alertsService.addComment(alertId, content, userId, authorName);
+  }
+
   @Post(':alertId/create-incident')
   @HttpCode(HttpStatus.CREATED)
   async createIncident(

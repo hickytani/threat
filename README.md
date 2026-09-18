@@ -129,15 +129,17 @@ The dashboard and API are designed around the actual system data model and seede
 
 ## Verification
 
-The project has been validated in the local environment with the following evidence:
+The project has been fully audited and validated with the following evidence:
 
-- 7 test suites passed
-- 76 tests passed
+- 17 test suites passed (100%)
+- 119 tests passed (100%)
 - API build succeeded
-- Web build succeeded
-- Redis-backed async queue path accepted and processed a live job with a real `jobId`
+- Web build succeeded (24/24 static pages compiled)
+- Redis-backed async queue path accepted and processed live events
+- SSRF protections verified with redirect suppression and private network range validation
+- Integrations RBAC mutation enforcement verified (HTTP 403 for non-admins)
 
-See the related implementation in [apps/api/src/queues/queue.service.ts](apps/api/src/queues/queue.service.ts), [apps/api/src/queues/queue.worker.ts](apps/api/src/queues/queue.worker.ts), and [apps/api/src/intelligence/threat-intel.provider.ts](apps/api/src/intelligence/threat-intel.provider.ts).
+See the related implementation in [apps/api/src/queues/queue.service.ts](apps/api/src/queues/queue.service.ts), [apps/api/src/queues/queue.worker.ts](apps/api/src/queues/queue.worker.ts), and [apps/api/src/notifications/notifications.service.ts](apps/api/src/notifications/notifications.service.ts).
 
 ---
 

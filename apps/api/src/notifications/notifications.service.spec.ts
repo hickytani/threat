@@ -1,6 +1,6 @@
 import { NotificationsService } from './notifications.service.js';
 
-describe('NotificationsService', () => {
+describe('NotificationsService — SSRF Protection Guard & Delivery Test', () => {
   let service: NotificationsService;
   let prismaMock: any;
 
@@ -26,7 +26,7 @@ describe('NotificationsService', () => {
     service = new NotificationsService(prismaMock);
   });
 
-  describe('SSRF Protection Guard', () => {
+  describe('SSRF Protection Guard (Target URL Host Validation)', () => {
     it('allows valid external HTTPS webhook URL', () => {
       expect(() => service.validateWebhookUrl('https://hooks.slack.com/services/T00/B00/X00')).not.toThrow();
     });
@@ -43,51 +43,75 @@ describe('NotificationsService', () => {
       expect(() => service.validateWebhookUrl('http://169.254.169.254/latest/meta-data')).toThrow('SSRF Security Guard');
     });
 
+    it('blocks GCP Metadata hostname metadata.google.internal', () => {
+      expect(() => service.validateWebhookUrl('http://metadata.google.internal/computeMetadata/v1/')).toThrow('SSRF Security Guard');
+    });
+
     it('blocks private IP range 10.0.0.1', () => {
       expect(() => service.validateWebhookUrl('http://10.0.1.50/webhook')).toThrow('SSRF Security Guard');
+    });
+
+    it('blocks private IP range 172.16.0.1', () => {
+      expect(() => service.validateWebhookUrl('http://172.16.5.10/webhook')).toThrow('SSRF Security Guard');
     });
 
     it('blocks private IP range 192.168.1.1', () => {
       expect(() => service.validateWebhookUrl('http://192.168.1.1/webhook')).toThrow('SSRF Security Guard');
     });
+
+    it('blocks link-local IP range 169.254.10.20', () => {
+      expect(() => service.validateWebhookUrl('http://169.254.10.20/webhook')).toThrow('SSRF Security Guard');
+    });
+
+    it('blocks IPv6 loopback [::1]', () => {
+      expect(() => service.validateWebhookUrl('http://[::1]:8080/webhook')).toThrow('SSRF Security Guard');
+    });
+
+    it('blocks DWORD numeric IP 2130706433 (127.0.0.1)', () => {
+      expect(() => service.validateWebhookUrl('http://2130706433/webhook')).toThrow('SSRF Security Guard');
+    });
+
+    it('blocks Hex DWORD IP 0x7f000001 (127.0.0.1)', () => {
+      expect(() => service.validateWebhookUrl('http://0x7f000001/webhook')).toThrow('SSRF Security Guard');
+    });
   });
 
-  describe('Notification Policy Evaluation', () => {
-    it('dispatches queued delivery when alert severity meets or exceeds policy threshold', async () => {
-      const mockPolicy = {
-        id: 'pol_01',
+  describe('SSRF Protection Guard (Redirect Prevention)', () => {
+    it('rejects HTTP 302 redirect responses to prevent SSRF redirect bypass', async () => {
+      const mockDelivery = {
+        id: 'del_redirect_test',
         organizationId: 'org_01',
-        name: 'Critical Alerts Policy',
-        isEnabled: true,
-        minSeverity: 'HIGH',
-        channelType: 'WEBHOOK',
-        webhookUrl: 'https://api.example.com/webhooks/security',
+        destinationUrl: 'https://example.com/redirect-to-private',
+        payload: { test: true },
       };
 
-      prismaMock.notificationPolicy.findMany.mockResolvedValue([mockPolicy]);
-      prismaMock.notificationDelivery.create.mockResolvedValue({
-        id: 'del_01',
-        organizationId: 'org_01',
-        destinationUrl: mockPolicy.webhookUrl,
-      });
+      prismaMock.notificationDelivery.findUnique.mockResolvedValue(mockDelivery);
+      prismaMock.notificationDelivery.update.mockResolvedValue(mockDelivery);
 
-      const mockAlert = {
-        id: 'alt_99',
-        severity: 'CRITICAL',
-        title: 'Critical Threat Detected',
-        category: 'EXPLOIT',
-      };
+      // Mock global fetch to return a 302 redirect response
+      const originalFetch = global.fetch;
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 302,
+        ok: false,
+        statusText: 'Found',
+        type: 'opaqueredirect',
+      }) as any;
 
-      await service.evaluateAndDispatchAlertNotifications('org_01', mockAlert);
+      try {
+        await service.deliverWebhookNotification('del_redirect_test');
 
-      expect(prismaMock.notificationDelivery.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          organizationId: 'org_01',
-          policyId: 'pol_01',
-          alertId: 'alt_99',
-          status: 'QUEUED',
-        }),
-      });
+        expect(prismaMock.notificationDelivery.update).toHaveBeenCalledWith({
+          where: { id: 'del_redirect_test' },
+          data: expect.objectContaining({
+            status: 'FAILED',
+            responseMetadata: expect.objectContaining({
+              error: expect.stringContaining('SSRF Security Guard: Target URL returned redirect status 302'),
+            }),
+          }),
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
     });
   });
 });

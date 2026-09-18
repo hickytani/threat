@@ -17,17 +17,48 @@ import cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from './common/http-exception.filter.js';
 import { rateLimitMiddleware } from './common/rate-limit.middleware.js';
 
+import express from 'express';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Enable graceful shutdown hooks for Prisma, Redis, and queues
+  app.enableShutdownHooks();
 
   if (process.env.NODE_ENV === 'production') {
     app.getHttpAdapter().getInstance().set('trust proxy', 1);
   }
+
+  // Request payload bounds
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+  // Security response headers
+  app.use((_req: any, res: any, next: any) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  });
+
+  // Dual health endpoint support: allow /health/* to resolve cleanly alongside /api/v1/health/*
+  app.use((req: any, _res: any, next: any) => {
+    if (req.url && (req.url === '/health/live' || req.url === '/health/ready' || req.url === '/health/dependencies' || req.url.startsWith('/health/'))) {
+      req.url = `/api/v1${req.url}`;
+    }
+    next();
+  });
+
   app.use(rateLimitMiddleware);
 
-  // Configure CORS to authorize Next.js client with credentials
+  // Configure CORS to authorize frontend client with credentials
+  const allowedOrigin = process.env.FRONTEND_URL || process.env.WEB_PUBLIC_URL || 'http://localhost:3000';
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: allowedOrigin,
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });

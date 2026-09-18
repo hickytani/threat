@@ -17,8 +17,11 @@ import { IntegrationsService } from './integrations.service.js';
 import { CreateIntegrationDto, UpdateIntegrationDto, TestEventDto } from './integrations.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
 import { CurrentMember } from '../auth/current-member.decorator.js';
 import type { ActiveMember } from '../auth/auth.interface.js';
+import { UserRole } from 'shared-types';
 
 @Controller('integrations')
 export class IntegrationsController {
@@ -55,7 +58,8 @@ export class IntegrationsController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, TenantGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole)
   @HttpCode(HttpStatus.CREATED)
   async create(
     @CurrentMember() member: ActiveMember,
@@ -67,7 +71,8 @@ export class IntegrationsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, TenantGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole)
   @HttpCode(HttpStatus.OK)
   async update(
     @CurrentMember() member: ActiveMember,
@@ -80,7 +85,8 @@ export class IntegrationsController {
   }
 
   @Post(':id/regenerate-secret')
-  @UseGuards(JwtAuthGuard, TenantGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole)
   @HttpCode(HttpStatus.OK)
   async regenerateSecret(
     @CurrentMember() member: ActiveMember,
@@ -92,7 +98,8 @@ export class IntegrationsController {
   }
 
   @Post(':id/revoke-secret')
-  @UseGuards(JwtAuthGuard, TenantGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole)
   @HttpCode(HttpStatus.OK)
   async revokeSecret(
     @CurrentMember() member: ActiveMember,
@@ -104,7 +111,8 @@ export class IntegrationsController {
   }
 
   @Post(':id/test-event')
-  @UseGuards(JwtAuthGuard, TenantGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole, 'SOC_MANAGER' as UserRole, 'SECURITY_ANALYST' as UserRole)
   @HttpCode(HttpStatus.OK)
   async testEvent(
     @CurrentMember() member: ActiveMember,
@@ -117,7 +125,8 @@ export class IntegrationsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, TenantGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole)
   @HttpCode(HttpStatus.OK)
   async delete(
     @CurrentMember() member: ActiveMember,

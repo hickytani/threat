@@ -63,15 +63,6 @@ export class LocalThreatIntelProvider {
     const score = deriveDeterministicScore(value, type);
     const label = score >= 80 ? 'MALICIOUS' : score <= 39 ? 'UNKNOWN' : 'SUSPICIOUS';
 
-    let country = 'US';
-    let asn = 'AS15169 Google LLC';
-
-    if (type === 'IPV4' || type === 'IPV6') {
-      const octet = parseInt(value.split('.')[0]) || 192;
-      country = octet % 2 === 0 ? 'NL' : octet % 3 === 0 ? 'RU' : 'US';
-      asn = octet % 2 === 0 ? 'AS31337 Leaseweb' : octet % 3 === 0 ? 'AS45678 Rostelecom' : 'AS15169 Google LLC';
-    }
-
     const newIoc = await this.prisma.iOC.create({
       data: {
         organizationId,
@@ -79,10 +70,8 @@ export class LocalThreatIntelProvider {
         type,
         reputationScore: score,
         label,
-        country,
-        asn,
-        associatedDomains: type === 'IPV4' ? [`reverse-dns-${value}.net`] : [],
-        associatedFiles: (type === 'MD5' || type === 'SHA256') ? ['suspicious_temp_payload.exe'] : [],
+        associatedDomains: [],
+        associatedFiles: [],
         detectionCount: 1,
       },
     });
@@ -106,8 +95,6 @@ export class LocalThreatIntelProvider {
       state: 'SUCCESS',
       label,
       score,
-      country,
-      asn,
       enrichments: [
         {
           sourceName: enrich.sourceName,

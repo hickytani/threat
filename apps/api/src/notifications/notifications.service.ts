@@ -223,9 +223,15 @@ export class NotificationsService {
         headers,
         body: JSON.stringify(delivery.payload),
         signal: controller.signal,
+        redirect: 'manual',
       });
 
       clearTimeout(timeout);
+
+      // SSRF Protection: Reject automatic HTTP 3xx redirects
+      if (response.status >= 300 && response.status < 400) {
+        throw new Error(`SSRF Security Guard: Target URL returned redirect status ${response.status}. Automatic HTTP redirects are restricted to prevent SSRF bypasses.`);
+      }
 
       const statusText = response.statusText || 'OK';
       const isSuccess = response.ok;
@@ -290,22 +296,54 @@ export class NotificationsService {
       throw new BadRequestException(`Webhook protocol must be HTTP or HTTPS. Received: ${parsed.protocol}`);
     }
 
-    const host = parsed.hostname.toLowerCase();
+    const rawHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
 
     // Loopback & Localhost check
-    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1') {
-      throw new BadRequestException(`SSRF Security Guard: Target host ${host} is restricted.`);
+    if (
+      rawHost === 'localhost' ||
+      rawHost === '127.0.0.1' ||
+      rawHost === '0.0.0.0' ||
+      rawHost === '::1' ||
+      rawHost === '0:0:0:0:0:0:0:1' ||
+      rawHost.endsWith('.localhost') ||
+      rawHost.endsWith('.local')
+    ) {
+      throw new BadRequestException(`SSRF Security Guard: Target host ${rawHost} is restricted.`);
     }
 
     // AWS / Cloud Metadata Service
-    if (host === '169.254.169.254' || host === 'metadata.google.internal') {
-      throw new BadRequestException(`SSRF Security Guard: Cloud metadata endpoint ${host} is restricted.`);
+    if (
+      rawHost === '169.254.169.254' ||
+      rawHost === 'metadata.google.internal' ||
+      rawHost.includes('169.254.169.254')
+    ) {
+      throw new BadRequestException(`SSRF Security Guard: Cloud metadata endpoint ${rawHost} is restricted.`);
+    }
+
+    // IPv6 Link-Local / Private / IPv4-mapped Checks
+    if (
+      rawHost.startsWith('fe80:') ||
+      rawHost.startsWith('fc00:') ||
+      rawHost.startsWith('fd00:') ||
+      rawHost.includes('::ffff:127.') ||
+      rawHost.includes('::ffff:10.') ||
+      rawHost.includes('::ffff:192.168.')
+    ) {
+      throw new BadRequestException(`SSRF Security Guard: Private/Link-Local IPv6 range ${rawHost} is restricted.`);
+    }
+
+    // Single DWORD / Hex / Octal numeric IP detection (e.g. 2130706433 = 127.0.0.1, 0x7f000001 = 127.0.0.1)
+    if (/^(0x[0-9a-f]+|\d+)$/i.test(rawHost)) {
+      throw new BadRequestException(`SSRF Security Guard: Numeric DWORD IP representation ${rawHost} is restricted.`);
     }
 
     // Private IPv4 Ranges
-    const ipParts = host.split('.').map(Number);
+    const ipParts = rawHost.split('.').map(Number);
     if (ipParts.length === 4 && ipParts.every((p) => !isNaN(p))) {
       const [first, second] = ipParts;
+      if (first === 127 || first === 0) {
+        throw new BadRequestException(`SSRF Security Guard: Loopback range ${rawHost} is restricted.`);
+      }
       if (first === 10) {
         throw new BadRequestException(`SSRF Security Guard: Private IP range 10.0.0.0/8 is restricted.`);
       }

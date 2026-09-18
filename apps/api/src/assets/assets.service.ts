@@ -271,24 +271,42 @@ export class AssetsService extends TenantScopedRepository {
   }
 
   async create(data: any) {
+    const rawCrit = (data.businessCriticality || data.criticality || 'MEDIUM').toUpperCase();
+    const criticalityMap: Record<string, AssetCriticality> = {
+      LOW: AssetCriticality.LOW,
+      MEDIUM: AssetCriticality.MEDIUM,
+      HIGH: AssetCriticality.HIGH,
+      CRITICAL: AssetCriticality.CRITICAL,
+    };
+
+    const rawEnv = (data.environment || 'DEV').toUpperCase();
+    const envMap: Record<string, Environment> = {
+      PROD: Environment.PROD,
+      PRODUCTION: Environment.PROD,
+      DEV: Environment.DEV,
+      DEVELOPMENT: Environment.DEV,
+      TEST: Environment.DEV,
+      STAGING: Environment.STAGING,
+    };
+
     return this.prisma.asset.create({
       data: {
         organizationId: this.organizationId,
         hostname: data.hostname,
         displayName: data.displayName || data.hostname,
-        type: data.type as AssetType,
-        ipAddress: data.ipAddress,
-        macAddress: data.macAddress,
-        operatingSystem: data.operatingSystem,
-        cloudProvider: data.cloudProvider,
-        region: data.region,
-        owner: data.owner,
-        department: data.department,
-        businessCriticality: (data.businessCriticality as AssetCriticality) || AssetCriticality.MEDIUM,
-        environment: (data.environment as Environment) || Environment.DEV,
-        isInternetFacing: data.isInternetFacing || false,
+        type: (data.type as AssetType) || AssetType.SERVER,
+        ipAddress: data.ipAddress || null,
+        macAddress: data.macAddress || null,
+        operatingSystem: data.operatingSystem || null,
+        cloudProvider: data.cloudProvider || null,
+        region: data.region || null,
+        owner: data.owner || null,
+        department: data.department || null,
+        businessCriticality: criticalityMap[rawCrit] || AssetCriticality.MEDIUM,
+        environment: envMap[rawEnv] || Environment.DEV,
+        isInternetFacing: Boolean(data.isInternetFacing),
         monitoringStatus: 'ACTIVE',
-        tags: data.tags || [],
+        tags: Array.isArray(data.tags) ? data.tags : [],
       },
     });
   }

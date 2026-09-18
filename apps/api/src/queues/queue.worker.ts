@@ -26,6 +26,11 @@ export class QueueWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
+    if (process.env.DISABLE_QUEUE_WORKER === 'true') {
+      this.logger.log('QueueWorker is disabled on this instance (DISABLE_QUEUE_WORKER=true). Background jobs are processed by external worker service.');
+      return;
+    }
+
     const redisUrl = process.env.REDIS_URL;
     const isProduction = process.env.NODE_ENV === 'production';
     const allowDevFallback = process.env.ENABLE_IN_MEMORY_QUEUE_FALLBACK === 'true' || !isProduction;

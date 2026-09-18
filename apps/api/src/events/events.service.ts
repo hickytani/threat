@@ -192,7 +192,7 @@ export class EventsService extends TenantScopedRepository {
     return evt;
   }
 
-  async ingest(input: IngestEventInput) {
+  async ingest(input: IngestEventInput & { ipAddress?: string; userIdentity?: string; idempotencyKey?: string; rawJson?: string }) {
     const actor = {
       id: this.request?.user?.id,
       email: this.request?.user?.email,
@@ -200,11 +200,23 @@ export class EventsService extends TenantScopedRepository {
     };
     const requestId = (this.request?.headers?.['x-request-id'] as string) || (this.request as any)?.id;
     const correlationId = (this.request?.headers?.['x-correlation-id'] as string) || requestId;
-    const idempotencyKey = input.metadata?.idempotencyKey || input.metadata?.eventId;
+    // Support idempotencyKey from top-level field or metadata
+    const idempotencyKey = input.idempotencyKey || input.metadata?.idempotencyKey || input.metadata?.eventId;
+
+    // Merge top-level convenience fields into metadata for pipeline
+    const normalizedInput: IngestEventInput = {
+      ...input,
+      metadata: {
+        ...(input.metadata || {}),
+        ...(input.ipAddress ? { ipAddress: input.ipAddress, sourceIp: input.ipAddress } : {}),
+        ...(input.userIdentity ? { userIdentity: input.userIdentity } : {}),
+        ...(idempotencyKey ? { idempotencyKey } : {}),
+      },
+    };
 
     return this.pipelineService.processEvent({
       organizationId: this.organizationId,
-      input,
+      input: normalizedInput,
       actor,
       context: { requestId, correlationId, idempotencyKey },
     });

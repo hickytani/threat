@@ -12,9 +12,14 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    // Enforce strong password complexity validation rules
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
-    if (!passwordRegex.test(dto.password)) {
+    // Enforce strong password complexity validation rules (min 12 chars, uppercase, lowercase, digit, symbol)
+    const hasMinLen = dto.password && dto.password.length >= 12;
+    const hasLower = /[a-z]/.test(dto.password);
+    const hasUpper = /[A-Z]/.test(dto.password);
+    const hasDigit = /\d/.test(dto.password);
+    const hasSymbol = /[^A-Za-z0-9]/.test(dto.password);
+
+    if (!hasMinLen || !hasLower || !hasUpper || !hasDigit || !hasSymbol) {
       throw new BadRequestException(
         'Password must be at least 12 characters long, containing at least one uppercase letter, one lowercase letter, one numeric digit, and one special character.'
       );
@@ -36,6 +41,10 @@ export class AuthService {
       const org = await tx.organization.create({
         data: {
           name: dto.organizationName,
+          size: dto.organizationSize || dto.orgSize || undefined,
+          industry: dto.organizationIndustry || undefined,
+          country: dto.organizationCountry || undefined,
+          timeZone: dto.organizationTimeZone || undefined,
         },
       });
 

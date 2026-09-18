@@ -4,16 +4,15 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: threatsync-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: threatsync
       POSTGRES_USER: threatsync
-      POSTGRES_PASSWORD: threatsync_secure_password
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-threatsync_secure_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U threatsync"]
+      test: ["CMD-SHELL", "pg_isready -U threatsync -d threatsync"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -21,8 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: threatsync-redis
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -33,15 +31,48 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: api
     container_name: threatsync-api
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://threatsync:threatsync_secure_password@postgres:5432/threatsync?schema=public
-      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
       PORT: 3001
-      JWT_SECRET: threatsync_prod_secret_jwt_key_change_in_production_32bytes
+      DATABASE_URL: postgresql://threatsync:${POSTGRES_PASSWORD:-threatsync_secure_password}@postgres:5432/threatsync?schema=public
+      REDIS_URL: redis://redis:6379
       ENABLE_IN_MEMORY_QUEUE_FALLBACK: "false"
+      JWT_SECRET: ${JWT_SECRET:-generate_strong_secret_at_least_32_characters_long_for_prod}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-generate_strong_refresh_secret_at_least_32_characters}
+      SESSION_SECRET: ${SESSION_SECRET:-generate_strong_session_secret_16_chars}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      DISABLE_QUEUE_WORKER: "true"
     ports:
       - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    container_name: threatsync-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://threatsync:${POSTGRES_PASSWORD:-threatsync_secure_password}@postgres:5432/threatsync?schema=public
+      REDIS_URL: redis://redis:6379
+      ENABLE_IN_MEMORY_QUEUE_FALLBACK: "false"
+      JWT_SECRET: ${JWT_SECRET:-generate_strong_secret_at_least_32_characters_long_for_prod}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-generate_strong_refresh_secret_at_least_32_characters}
+      SESSION_SECRET: ${SESSION_SECRET:-generate_strong_session_secret_16_chars}
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,13 +83,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: web
     container_name: threatsync-web
+    restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
     ports:
       - "3000:3000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   postgres_data:

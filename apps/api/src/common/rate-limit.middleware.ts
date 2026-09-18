@@ -46,6 +46,12 @@ function routePolicy(path: string) {
   if (path === '/api/v1/events/ingest') {
     return { limit: Number(process.env.INGEST_RATE_LIMIT_MAX || 300), windowMs: Number(process.env.INGEST_RATE_LIMIT_WINDOW_MS || 60_000) };
   }
+  if (path.startsWith('/api/v1/events/webhook/')) {
+    return { limit: Number(process.env.WEBHOOK_RATE_LIMIT_MAX || process.env.INGEST_RATE_LIMIT_MAX || 300), windowMs: Number(process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS || 60_000) };
+  }
+  if (path.includes('/test-event')) {
+    return { limit: 30, windowMs: 60_000 };
+  }
   if (path.startsWith('/api/v1/intelligence/')) {
     return { limit: Number(process.env.INTELLIGENCE_RATE_LIMIT_MAX || 60), windowMs: Number(process.env.INTELLIGENCE_RATE_LIMIT_WINDOW_MS || 60_000) };
   }
@@ -62,7 +68,8 @@ export function rateLimitMiddleware(request: Request, response: Response, next: 
   const now = Date.now();
   cleanupExpiredBuckets(now);
 
-  const identity = request.headers.authorization?.slice(0, 16) || request.ip || 'unknown';
+  const rawSecret = (request.headers['x-webhook-secret'] || request.headers['x-integration-secret']) as string | undefined;
+  const identity = rawSecret?.slice(0, 16) || request.headers.authorization?.slice(0, 16) || request.ip || 'unknown';
   const key = `${request.path}:${identity}`;
   const current = buckets.get(key);
   const bucket = !current || current.resetAt <= now

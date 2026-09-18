@@ -71,20 +71,26 @@ export class IntegrationsService {
       ...(dto.configuration || {}),
     };
 
-    const created = await this.prisma.integration.create({
-      data: {
-        organizationId,
-        name: dto.name,
-        type: dto.type || 'WEBHOOK',
-        isEnabled: dto.isEnabled ?? true,
-        status: 'ACTIVE',
-        health: 'OK',
-        eventCount: 0,
-        errorCount: 0,
-        configuration: defaultConfig as any,
-        encryptedCredentials: webhookSecret,
-      },
-    });
+    let created: any;
+    try {
+      created = await this.prisma.integration.create({
+        data: {
+          organizationId,
+          name: dto.name,
+          type: dto.type || 'WEBHOOK',
+          isEnabled: dto.isEnabled ?? true,
+          status: 'ACTIVE',
+          health: 'OK',
+          eventCount: 0,
+          errorCount: 0,
+          configuration: JSON.parse(JSON.stringify(defaultConfig)),
+          encryptedCredentials: webhookSecret,
+        },
+      });
+    } catch (err: any) {
+      this.logger.error(`Integration creation error: ${err.message}`, err.stack);
+      throw new BadRequestException(`Integration creation failed: ${err.message}`);
+    }
 
     await this.createAuditLog(
       organizationId,

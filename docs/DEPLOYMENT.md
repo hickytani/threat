@@ -1,85 +1,129 @@
-# Deployment
+# ThreatSync OS — Production Deployment Guide
 
-## Logical Services
+This guide details the complete procedure for building, migrating, running, and managing ThreatSync OS in production.
 
-The intended production topology contains:
+---
+
+## 1. System Architecture & Topology
 
 ```text
-Next.js web -> NestJS API -> PostgreSQL
-                     |\
-                     | Redis/BullMQ worker
-                     |\
-                     +-> optional external intelligence providers
+Internet / Clients
+        │
+        ▼ (HTTPS / Port 443)
+┌─────────────────────────────────────────────────────────┐
+│              Reverse Proxy / Load Balancer              │
+│       (NGINX / AWS ALB / Cloudflare / Traefik)          │
+└──────────────┬──────────────────────────┬───────────────┘
+               │                          │
+   / (Web UI)  │                          │  /api/v1 (REST & Webhooks)
+               ▼                          ▼
+┌──────────────────────────┐   ┌──────────────────────────┐
+│      Next.js Web         │   │       NestJS API         │
+│     (Node 20 / :3000)    │   │     (Node 20 / :3001)    │
+└──────────────────────────┘   └──────────┬───────────────┘
+                                          │
+                        ┌─────────────────┴─────────────────┐
+                        │                                   │
+                        ▼                                   ▼
+          ┌──────────────────────────┐        ┌──────────────────────────┐
+          │  PostgreSQL 16 Database  │        │   Redis 7 / BullMQ Queue │
+          │ (State, Audit, Telemetry)│        │   (Async Ingestion Queue)│
+          └──────────────────────────┘        └─────────────┬────────────┘
+                                                            │
+                                                            ▼
+                                              ┌──────────────────────────┐
+                                              │      BullMQ Worker       │
+                                              │  (Background Ingestion)  │
+                                              └──────────────────────────┘
 ```
 
-The current queue worker is initialized by the API application. Run it as a separate process only after adding an explicit worker bootstrap that shares the queue module without opening HTTP routes.
+---
 
-## Required Production Variables
+## 2. Production Deployment Steps
+
+### Step 1: Provision Infrastructure
+- **PostgreSQL 16+**: Provision a managed database (e.g. AWS RDS PostgreSQL, GCP Cloud SQL).
+- **Redis 7+**: Provision a managed Redis instance (e.g. AWS ElastiCache).
+
+### Step 2: Environment Configuration
+Create environment files or set process variables per [`PRODUCTION_CONFIGURATION.md`](./PRODUCTION_CONFIGURATION.md).
 
 ```env
 NODE_ENV=production
 PORT=3001
-FRONTEND_URL=https://app.example.com
-NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
-DATABASE_URL=postgresql://...
-REDIS_URL=redis://...
+DATABASE_URL=postgresql://threatsync_user:STRONG_PASSWORD@postgres.internal:5432/threatsync?schema=public
+REDIS_URL=redis://redis.internal:6379
 ENABLE_IN_MEMORY_QUEUE_FALLBACK=false
-JWT_SECRET=<strong-random-secret>
-JWT_REFRESH_SECRET=<different-strong-random-secret>
-SESSION_SECRET=<different-strong-random-secret>
-AI_PROVIDER=mock
+
+JWT_SECRET=c3f81e90d2a45b67890123456789abcdef0123456789abcdef0123456789abcd
+JWT_REFRESH_SECRET=7f8e9d0c1b2a34567890123456789abcdef0123456789abcdef0123456789a
+SESSION_SECRET=a1b2c3d4e5f67890123456789abcdef0
+
+FRONTEND_URL=https://app.threatsync.io
+NEXT_PUBLIC_API_URL=https://api.threatsync.io/api/v1
 ALLOW_DEMO_SEED=false
 ```
 
-Use provider-specific API keys only when that provider is intentionally enabled. Never commit or expose these values to the browser.
+### Step 3: Run Database Migrations
+**DO NOT USE `prisma db push` IN PRODUCTION.**
 
-## Database
-
-For a new production database:
+Execute standard Prisma migration deployment:
 
 ```bash
 npm ci
 npm run db:generate
-npx prisma migrate deploy --schema packages/database/prisma/schema.prisma
-npm run build --workspace=apps/api
+npm run db:migrate
 ```
 
-The repository now contains a baseline migration including the ingestion credential model. Existing databases with no migration history require a deliberate Prisma baseline/adoption procedure; do not run a reset against customer data. Local development can use:
+This applies baseline migrations from `packages/database/prisma/migrations` safely against the target PostgreSQL schema.
+
+### Step 4: Multi-Stage Container Build & Start
+
+Build container using production `Dockerfile`:
 
 ```bash
-npm run db:push
+docker build -t threatsync/app:v1.0.0 .
 ```
 
-Never run `npm run db:seed` as part of production startup.
-
-## Start Commands
+Start container services:
 
 ```bash
-npm run start:prod --workspace=apps/api
-npm run start --workspace=apps/web
+# API Service
+docker run -d --name threatsync-api \
+  --env-file .env.production \
+  -p 3001:3001 \
+  threatsync/app:v1.0.0 npm run start:prod --workspace=apps/api
+
+# Web Frontend Service
+docker run -d --name threatsync-web \
+  --env-file .env.production \
+  -p 3000:3000 \
+  threatsync/app:v1.0.0 npm run start --workspace=apps/web
 ```
 
-The web host must set `NEXT_PUBLIC_API_URL` at build time. The API host must allow the exact `FRONTEND_URL` with credentials.
-
-## Health Checks
-
-- Liveness: `GET /api/v1/health/live`
-- Readiness: `GET /api/v1/health/ready`
-- Dependency status: `GET /api/v1/health/dependencies`
-
-Readiness requires the database and, in production, real Redis. A mock queue must not be reported as production-ready.
-
-## Pre-Launch Verification
+Or run via Docker Compose:
 
 ```bash
-npm test --workspaces --if-present -- --runInBand
-npm run build --workspaces --if-present
-git diff --check
-git status
+docker-compose up -d --build
 ```
 
-Then verify registration, clean organization state, credential creation, authenticated ingestion, duplicate behavior, alert/incident processing, tenant isolation, credential revocation, and restart persistence against a non-demo production-like database.
+---
 
-## Remaining Deployment Work
+## 3. Production Health Monitoring
 
-A public launch still needs CI/CD, managed PostgreSQL and Redis, secret rotation, distributed/edge rate limiting, backups, centralized logs/metrics, a separate worker entrypoint, and an independent security review of the chosen hosting topology.
+Health endpoints for load balancer and orchestration checks:
+
+- **Liveness probe**: `GET /api/v1/health/live` (Returns `200 OK`)
+- **Readiness probe**: `GET /api/v1/health/ready` (Returns `200 OK` if DB is connected & Redis is reachable)
+- **Dependencies probe**: `GET /api/v1/health/dependencies` (Returns breakdown of DB & Redis status)
+
+---
+
+## 4. PostgreSQL Database Backup & Disaster Recovery Strategy
+
+1. **Daily Automated Snapshots**: Configure cloud database provider for continuous point-in-time recovery (PITR) with a minimum 30-day retention window.
+2. **Logical Backups (`pg_dump`)**: Schedule nightly encrypted `pg_dump` exports stored in off-site object storage (AWS S3 Glacier / GCP Coldline):
+   ```bash
+   pg_dump -h postgres.internal -U threatsync_user -d threatsync --format=custom --file=threatsync_backup_$(date +%Y%m%d).dump
+   ```
+3. **Migration Rollbacks**: Always create a snapshot prior to applying schema migrations (`npm run db:migrate`). Test restore procedures on a staging copy quarterly.

@@ -10,7 +10,21 @@ import type {
   TimelineItem,
 } from 'shared-types';
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+export function getApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== 'undefined') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocalhost) {
+      // In production deployment behind reverse proxy
+      return '/api/v1';
+    }
+  }
+  return 'http://localhost:3001/api/v1';
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export class ApiClientError extends Error {
   status: number;

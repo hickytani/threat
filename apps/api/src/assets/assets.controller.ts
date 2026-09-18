@@ -2,6 +2,8 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Ht
 import { AssetsService } from './assets.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
 
 @Controller('assets')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -34,6 +36,8 @@ export class AssetsController {
   }
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'SOC_MANAGER', 'SECURITY_ANALYST')
   @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() data: any,
@@ -42,6 +46,8 @@ export class AssetsController {
   }
 
   @Patch(':assetId')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'SOC_MANAGER', 'SECURITY_ANALYST')
   @HttpCode(HttpStatus.OK)
   async update(
     @Param('assetId') assetId: string,
@@ -51,6 +57,8 @@ export class AssetsController {
   }
 
   @Delete(':assetId')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN', 'ORG_ADMIN', 'SOC_MANAGER')
   @HttpCode(HttpStatus.OK)
   async remove(
     @Param('assetId') assetId: string,

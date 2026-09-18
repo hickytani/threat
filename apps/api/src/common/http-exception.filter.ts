@@ -32,12 +32,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
         }
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
       if (exception.constructor.name.includes('Prisma')) {
         status = HttpStatus.BAD_REQUEST;
         code = 'DATABASE_ERROR';
         // Hide stack details or specific Prisma SQL queries from production logs
         message = 'A database operation failed validation.';
+      } else if (process.env.NODE_ENV === 'production') {
+        message = 'An unexpected internal error occurred.';
+      } else {
+        message = exception.message;
       }
     }
 

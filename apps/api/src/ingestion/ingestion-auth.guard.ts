@@ -12,11 +12,26 @@ export class IngestionAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const header = request.headers.authorization;
-    const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    const authHeader = request.headers.authorization;
+    const xTokenHeader = request.headers['x-ingestion-token'] as string | undefined;
+    const xKeyHeader = request.headers['x-ingestion-key'] as string | undefined;
+    const xApiKeyHeader = request.headers['x-api-key'] as string | undefined;
 
-    if (!token.startsWith('ts_ing_')) {
-      throw new UnauthorizedException('A valid ingestion credential is required');
+    let token = '';
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7).trim();
+    } else if (authHeader && authHeader.startsWith('ts_ing_')) {
+      token = authHeader.trim();
+    } else if (xTokenHeader) {
+      token = xTokenHeader.trim();
+    } else if (xKeyHeader) {
+      token = xKeyHeader.trim();
+    } else if (xApiKeyHeader) {
+      token = xApiKeyHeader.trim();
+    }
+
+    if (!token || !token.startsWith('ts_ing_')) {
+      throw new UnauthorizedException('A valid ingestion credential is required (e.g. Bearer ts_ing_... or X-Ingestion-Token header)');
     }
 
     const credential = await this.prisma.ingestionCredential.findUnique({
