@@ -10,21 +10,7 @@ import type {
   TimelineItem,
 } from 'shared-types';
 
-export function getApiBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined') {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (!isLocalhost) {
-      // In production deployment behind reverse proxy
-      return '/api/v1';
-    }
-  }
-  return 'http://localhost:3001/api/v1';
-}
-
-export const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 export class ApiClientError extends Error {
   status: number;
@@ -210,6 +196,14 @@ export async function getSystemHealth() {
   }>('/health/dependencies');
 }
 
+export async function getAuthSession() {
+  return apiRequest<any>('/auth/session');
+}
+
+export async function getAuthMe() {
+  return apiRequest<any>('/auth/me');
+}
+
 export async function getIngestionCredentials() {
   return apiRequest<any[]>('/organizations/current/ingestion-credentials');
 }
@@ -227,35 +221,119 @@ export async function revokeIngestionCredential(id: string) {
   });
 }
 
-export async function getDashboardActivity(signal?: AbortSignal) {
-  return apiRequest<any[]>('/dashboard/activity', { signal });
+export async function getRelatedAlerts(alertId: string) {
+  return apiRequest<any[]>(`/alerts/${alertId}/related`);
 }
 
-export async function getDashboardPosture() {
-  return apiRequest<any>('/dashboard/posture');
+export async function getOrgMembers() {
+  return apiRequest<any[]>('/organizations/current/members');
 }
 
-export async function getDashboardIngestionMetrics() {
-  return apiRequest<any>('/dashboard/ingestion');
+export async function updateAlert(alertId: string, data: Record<string, any>) {
+  return apiRequest<any>(`/alerts/${alertId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 }
 
-export async function getAuthMe() {
-  return apiRequest<any>('/auth/me');
+export async function addAlertComment(alertId: string, content: string) {
+  return apiRequest<any>(`/alerts/${alertId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
 }
 
-// Rules API Client
+export async function getIntegrations(type?: string) {
+  return apiRequest<any[]>(`/integrations${type ? `?type=${encodeURIComponent(type)}` : ''}`);
+}
+
+export async function getIntegrationDetails(id: string) {
+  return apiRequest<any>(`/integrations/${id}`);
+}
+
+export async function getIntegrationMetrics(id: string) {
+  return apiRequest<any>(`/integrations/${id}/metrics`);
+}
+
+export async function createIntegration(data: Record<string, any>) {
+  return apiRequest<any>('/integrations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateIntegration(id: string, data: Record<string, any>) {
+  return apiRequest<any>(`/integrations/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function testIntegrationEvent(id: string, payload?: Record<string, any>) {
+  return apiRequest<any>(`/integrations/${id}/test-event`, {
+    method: 'POST',
+    body: JSON.stringify({ payload: payload ?? {} }),
+  });
+}
+
+export async function regenerateIntegrationSecret(id: string) {
+  return apiRequest<any>(`/integrations/${id}/regenerate-secret`, {
+    method: 'POST',
+  });
+}
+
+export async function revokeIntegrationSecret(id: string) {
+  return apiRequest<any>(`/integrations/${id}/revoke-secret`, {
+    method: 'POST',
+  });
+}
+
+export async function deleteIntegration(id: string) {
+  return apiRequest<any>(`/integrations/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getNotificationPolicies() {
+  return apiRequest<any[]>('/notifications/policies');
+}
+
+export async function getNotificationHistory(params: Record<string, any> = {}) {
+  return apiRequest<any[]>(`/notifications/history${buildQueryString(params)}`);
+}
+
+export async function createNotificationPolicy(data: Record<string, any>) {
+  return apiRequest<any>('/notifications/policies', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateNotificationPolicy(id: string, data: Record<string, any>) {
+  return apiRequest<any>(`/notifications/policies/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteNotificationPolicy(id: string) {
+  return apiRequest<any>(`/notifications/policies/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function getRules(params: Record<string, any> = {}) {
   return apiRequest<any[]>(`/rules${buildQueryString(params)}`);
 }
 
-export async function createRule(data: any) {
+export async function createRule(data: Record<string, any>) {
   return apiRequest<any>('/rules', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
-export async function updateRule(id: string, data: any) {
+export async function updateRule(id: string, data: Record<string, any>) {
   return apiRequest<any>(`/rules/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
@@ -275,106 +353,11 @@ export async function testRule(matchConditions: Record<string, any>, sampleEvent
   });
 }
 
-// Integrations API Client
-export async function getIntegrations(type?: string) {
-  return apiRequest<any[]>(`/integrations${buildQueryString({ type })}`);
+export async function getDashboardPosture() {
+  return apiRequest<any>('/dashboard/posture');
 }
 
-export async function getIntegrationDetails(id: string) {
-  return apiRequest<any>(`/integrations/${id}`);
+export async function getDashboardActivity(signal?: AbortSignal) {
+  return apiRequest<any[]>('/dashboard/activity', { signal });
 }
 
-export async function getIntegrationMetrics(id: string) {
-  return apiRequest<any>(`/integrations/${id}/metrics`);
-}
-
-export async function createIntegration(data: any) {
-  return apiRequest<any>('/integrations', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function updateIntegration(id: string, data: any) {
-  return apiRequest<any>(`/integrations/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function regenerateIntegrationSecret(id: string) {
-  return apiRequest<any>(`/integrations/${id}/regenerate-secret`, {
-    method: 'POST',
-  });
-}
-
-export async function revokeIntegrationSecret(id: string) {
-  return apiRequest<any>(`/integrations/${id}/revoke-secret`, {
-    method: 'POST',
-  });
-}
-
-export async function testIntegrationEvent(id: string, payload?: any) {
-  return apiRequest<any>(`/integrations/${id}/test-event`, {
-    method: 'POST',
-    body: JSON.stringify({ payload }),
-  });
-}
-
-export async function deleteIntegration(id: string) {
-  return apiRequest<any>(`/integrations/${id}`, {
-    method: 'DELETE',
-  });
-}
-
-// Extended Alert Workflow
-export async function updateAlert(alertId: string, data: any) {
-  return apiRequest<any>(`/alerts/${alertId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function getRelatedAlerts(alertId: string) {
-  return apiRequest<any[]>(`/alerts/${alertId}/related`);
-}
-
-export async function addAlertComment(alertId: string, content: string) {
-  return apiRequest<any>(`/alerts/${alertId}/comments`, {
-    method: 'POST',
-    body: JSON.stringify({ content }),
-  });
-}
-
-// Notification Engine API Client
-export async function getNotificationPolicies() {
-  return apiRequest<any[]>('/notifications/policies');
-}
-
-export async function createNotificationPolicy(data: any) {
-  return apiRequest<any>('/notifications/policies', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function updateNotificationPolicy(id: string, data: any) {
-  return apiRequest<any>(`/notifications/policies/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function deleteNotificationPolicy(id: string) {
-  return apiRequest<any>(`/notifications/policies/${id}`, {
-    method: 'DELETE',
-  });
-}
-
-export async function getNotificationHistory(params: Record<string, any> = {}) {
-  return apiRequest<any[]>(`/notifications/history${buildQueryString(params)}`);
-}
-
-export async function getOrgMembers() {
-  return apiRequest<any[]>('/organizations/current/members');
-}

@@ -88,7 +88,7 @@ export class DashboardService {
         outcome: evt.outcome,
         severity: evt.severity,
         message: evt.message,
-        sourceIp: evt.sourceIp || metadata.sourceIp || metadata.ipAddress || '10.0.1.50',
+        sourceIp: evt.sourceIp || metadata.sourceIp || metadata.ipAddress || null,
         destinationIp: evt.destinationIp || metadata.destinationIp || null,
         assetId: evt.assetId || null,
         target: asset?.hostname || asset?.displayName || metadata.hostname || 'Unassigned Host',

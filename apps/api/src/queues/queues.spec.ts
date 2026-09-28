@@ -44,14 +44,14 @@ describe('Queues and Correlation Engine', () => {
       },
       alert: {
         create: jest.fn(),
-        update: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: 'mock_alert_id' }),
         updateMany: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
       },
       incident: {
         create: jest.fn(),
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       incidentComment: {
         create: jest.fn(),
@@ -229,6 +229,11 @@ describe('Queues and Correlation Engine', () => {
       expect(incident).toBeDefined();
       expect(incident?.id).toBe('inc_existing');
       expect(prismaMock.incident.create).not.toHaveBeenCalled();
+      // Alert must be linked to the existing incident when a match is found
+      expect(prismaMock.alert.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: mockAlert.id },
+        data: expect.objectContaining({ incidentId: 'inc_existing' }),
+      }));
     });
 
     it('should trigger lateral movement pattern escalation when 3 distinct assets trigger alerts within 1 hour', async () => {
@@ -252,9 +257,11 @@ describe('Queues and Correlation Engine', () => {
       const incident = await correlationService.correlateAlert(mockAlert);
 
       expect(incident).toBeDefined();
+      // Title now reflects the actual alert category, not a generic static string
       expect(prismaMock.incident.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
-          title: 'Correlated Security Incident: Multi-Asset Threat Group',
+          title: 'Correlated Security Incident: AUTHENTICATION_ANOMALY Threat Group',
+          tags: expect.arrayContaining(['CorrelationEngine', 'MULTI_ASSET_LATERAL_MOVEMENT']),
         }),
       }));
     });

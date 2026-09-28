@@ -134,33 +134,70 @@ export class RulesService {
     return true;
   }
 
+  /**
+   * Canonical field comparison operator.
+   * THIS IS THE SINGLE SOURCE OF TRUTH for condition evaluation.
+   * EventPipelineService.compareCondition() must implement identical logic.
+   * testRule() and production detection use this same evaluator — no divergence.
+   */
   private compareValues(actual: any, expected: any): boolean {
-    if (typeof expected === 'object' && expected !== null) {
-      if (expected.operator && expected.value !== undefined) {
-        const val = String(actual || '').toLowerCase();
-        const exp = String(expected.value || '').toLowerCase();
-        switch (String(expected.operator).toUpperCase()) {
-          case 'EQUALS':
-          case 'EQ':
-            return val === exp;
-          case 'CONTAINS':
-          case 'LIKE':
-            return val.includes(exp);
-          case 'STARTS_WITH':
-            return val.startsWith(exp);
-          case 'GREATER_THAN':
-          case 'GT':
-            return Number(actual) > Number(expected.value);
-          case 'LESS_THAN':
-          case 'LT':
-            return Number(actual) < Number(expected.value);
-          case 'NOT_EQUALS':
-          case 'NEQ':
-            return val !== exp;
-          default:
-            return val === exp;
+    if (expected && typeof expected === 'object' && !Array.isArray(expected) && expected.operator) {
+      const operator = String(expected.operator).toUpperCase();
+      const expectedValue = expected.value;
+      const actualText = String(actual ?? '').toLowerCase();
+      const expectedText = String(expectedValue ?? '').toLowerCase();
+
+      switch (operator) {
+        case 'EQUALS':
+        case 'EQ':
+          return actualText === expectedText;
+        case 'NOT_EQUALS':
+        case 'NEQ':
+          return actualText !== expectedText;
+        case 'CONTAINS':
+        case 'LIKE':
+          return actualText.includes(expectedText);
+        case 'NOT_CONTAINS':
+          return !actualText.includes(expectedText);
+        case 'STARTS_WITH':
+          return actualText.startsWith(expectedText);
+        case 'ENDS_WITH':
+          return actualText.endsWith(expectedText);
+        case 'IN':
+          return Array.isArray(expectedValue) && expectedValue.some((v: any) => this.compareValues(actual, v));
+        case 'NOT_IN':
+          return Array.isArray(expectedValue) && !expectedValue.some((v: any) => this.compareValues(actual, v));
+        case 'EXISTS':
+          return expectedValue
+            ? actual !== undefined && actual !== null && actual !== ''
+            : actual === undefined || actual === null || actual === '';
+        case 'GREATER_THAN':
+        case 'GT':
+          return Number.isFinite(Number(actual)) && Number(actual) > Number(expectedValue);
+        case 'LESS_THAN':
+        case 'LT':
+          return Number.isFinite(Number(actual)) && Number(actual) < Number(expectedValue);
+        case 'GREATER_THAN_OR_EQUAL':
+        case 'GTE':
+          return Number.isFinite(Number(actual)) && Number(actual) >= Number(expectedValue);
+        case 'LESS_THAN_OR_EQUAL':
+        case 'LTE':
+          return Number.isFinite(Number(actual)) && Number(actual) <= Number(expectedValue);
+        case 'REGEX': {
+          if (typeof expectedValue !== 'string' || expectedValue.length > 256) return false;
+          try {
+            return new RegExp(expectedValue, 'i').test(String(actual ?? ''));
+          } catch {
+            return false;
+          }
         }
+        default:
+          return false;
       }
+    }
+
+    if (Array.isArray(expected)) {
+      return expected.some((v: any) => this.compareValues(actual, v));
     }
 
     if (typeof actual === 'string' && typeof expected === 'string') {

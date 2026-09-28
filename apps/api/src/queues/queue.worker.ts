@@ -155,7 +155,7 @@ export class QueueWorker implements OnModuleInit, OnModuleDestroy {
             data: {
               organizationId,
               title: `Escalated Alert: ${alert.title}`,
-              summary: `Autonomous escalation process created incident from Alert ID ${alert.id}. Category: ${alert.category}.`,
+              summary: `Queue-triggered escalation incident created from Alert ID ${alert.id}. Category: ${alert.category}.`,
               severity: alert.severity,
               priority: alert.severity,
               status: IncidentStatus.OPEN,
@@ -181,7 +181,7 @@ export class QueueWorker implements OnModuleInit, OnModuleDestroy {
               incidentId: inc.id,
               authorId: userId,
               authorName: fullName,
-              content: `Autonomous incident escalation worker successfully mapped alert footprint ${alert.id} to this ticket.`,
+              content: `Queue escalation worker linked alert ${alert.id} to this incident via the background job pipeline.`,
             },
           });
 

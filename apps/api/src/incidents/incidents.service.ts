@@ -432,6 +432,10 @@ export class IncidentsService extends TenantScopedRepository {
     });
     if (!inc) throw new NotFoundException(`Incident with ID ${id} not found`);
 
+    if (!data.fileUrl) {
+      throw new BadRequestException('fileUrl is required for evidence records');
+    }
+
     return this.prisma.evidence.create({
       data: {
         incidentId: id,
@@ -440,7 +444,7 @@ export class IncidentsService extends TenantScopedRepository {
         mimeType: data.mimeType || 'text/plain',
         uploadedById: userId,
         uploadedByName: userName,
-        fileUrl: data.fileUrl || '/evidence/mock-url',
+        fileUrl: data.fileUrl,
         status: EvidenceStatus.CLEAN,
       },
     });

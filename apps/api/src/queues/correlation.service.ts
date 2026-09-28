@@ -11,7 +11,10 @@ export class CorrelationService {
   ) {}
 
   /**
-   * Evaluates ingestion footprint patterns and triggers automated escalations.
+   * Deterministic correlation engine.
+   * Evaluates an incoming alert against three explicit patterns to determine
+   * whether an incident should be created or an existing one extended.
+   * This is rule-based logic — not probabilistic, not AI-driven.
    */
   async correlateAlert(alert: Alert) {
     this.logger.log(`Evaluating correlation rules for alert: id=${alert.id}, category=${alert.category}`);
@@ -19,6 +22,11 @@ export class CorrelationService {
     const existingIncident = await this.findExistingCorrelatedIncident(alert);
     if (existingIncident) {
       this.logger.log(`Found existing correlated incident ${existingIncident.id} for alert ${alert.id}.`);
+      // Link alert to existing incident without creating a duplicate
+      await this.prisma.alert.update({
+        where: { id: alert.id },
+        data: { incidentId: existingIncident.id },
+      });
       return existingIncident;
     }
 
@@ -76,35 +84,42 @@ export class CorrelationService {
 
     let triggerEscalation = false;
     let correlationReason = '';
+    let correlationDimension = '';
     const correlatedAlertIds = [alert.id, ...similarAlerts.map(a => a.id)];
 
     if (uniqueAssetIds.size >= 3) {
       triggerEscalation = true;
-      correlationReason = `Lateral threat movement pattern: Active alert footprints detected across ${uniqueAssetIds.size} distinct assets within 1 hour.`;
+      correlationDimension = 'MULTI_ASSET_LATERAL_MOVEMENT';
+      correlationReason = `Lateral threat movement pattern: Alerts detected across ${uniqueAssetIds.size} distinct assets within 1 hour sharing the same source IP, domain, or user identity.`;
     } else if (iocMatch) {
       triggerEscalation = true;
-      correlationReason = `Threat intel match pattern: Traffic matches malicious indicators of compromise (IOC) bound to [${iocMatch.value}].`;
+      correlationDimension = 'MALICIOUS_IOC_MATCH';
+      correlationReason = `Threat intelligence match: Traffic matches malicious IOC [${iocMatch.value}] (type: ${iocMatch.type}, label: ${iocMatch.label}).`;
     } else if (vulnMatch) {
       triggerEscalation = true;
-      correlationReason = `Exposed vulnerability exploit pattern: Alert observed on internet-facing asset hosting unresolved CVSS 9.0+ vulnerabilities.`;
+      correlationDimension = 'CRITICAL_VULN_EXPLOIT_ATTEMPT';
+      correlationReason = `Exposed vulnerability exploit pattern: High-severity alert on internet-facing asset with unresolved CVSS 9.0+ vulnerabilities.`;
     }
 
     if (triggerEscalation) {
-      this.logger.log(`Correlation rules matched! Triggering automated incident escalation...`);
+      this.logger.log(`Correlation pattern matched [${correlationDimension}]. Creating incident from ${correlatedAlertIds.length} correlated alerts.`);
+
+      const severityLabel = [alert.severity, ...similarAlerts.map(a => a.severity)]
+        .includes('CRITICAL') ? 'CRITICAL' : 'HIGH';
 
       // Create Incident
       const incident = await this.prisma.incident.create({
         data: {
           organizationId: alert.organizationId,
-          title: `Correlated Security Incident: Multi-Asset Threat Group`,
-          summary: `${correlationReason}\n\nCorrelated Alert Footprints: ${correlatedAlertIds.join(', ')}`,
-          severity: alert.severity === AlertSeverity.CRITICAL ? AlertSeverity.CRITICAL : AlertSeverity.HIGH,
-          priority: AlertSeverity.HIGH,
-          status: IncidentStatus.OPEN,
+          title: `Correlated Security Incident: ${alert.category} Threat Group`,
+          summary: `${correlationReason}\n\nCorrelation dimension: ${correlationDimension}\nCorrelated alert IDs: ${correlatedAlertIds.join(', ')}`,
+          severity: severityLabel as any,
+          priority: 'HIGH' as any,
+          status: 'OPEN' as any,
           incidentType: 'CORRELATED_THREAT_GROUP',
           detectionTime: new Date(),
-          slaDeadline: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours SLA for correlated threats
-          tags: ['CorrelationEngine', 'AutoIncident'] as any,
+          slaDeadline: new Date(Date.now() + 2 * 60 * 60 * 1000),
+          tags: ['CorrelationEngine', correlationDimension] as any,
         },
       });
 
@@ -117,13 +132,19 @@ export class CorrelationService {
         },
       });
 
-      // Log Comment inside Incident
+      // Log correlation evidence as an internal incident comment
       await this.prisma.incidentComment.create({
         data: {
           incidentId: incident.id,
           authorId: 'system',
           authorName: 'Correlation Engine',
-          content: `Autonomous correlation engine automatically grouped ${correlatedAlertIds.length} alerts under this ticket.\nReason: ${correlationReason}`,
+          content: [
+            `Correlation engine grouped ${correlatedAlertIds.length} alert(s) under this incident.`,
+            `Pattern: ${correlationDimension}`,
+            `Reason: ${correlationReason}`,
+            `Alert IDs: ${correlatedAlertIds.join(', ')}`,
+          ].join('\n'),
+          isInternalOnly: true,
         },
       });
 
