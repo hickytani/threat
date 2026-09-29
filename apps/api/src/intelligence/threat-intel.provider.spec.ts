@@ -44,6 +44,8 @@ describe('Threat Intel providers', () => {
   });
 
   it('marks the external provider as unavailable when no provider is configured', async () => {
+    delete process.env.VIRUSTOTAL_API_KEY;
+    delete process.env.ABUSEIPDB_API_KEY;
     const provider = new ExternalThreatIntelProvider();
 
     const result = await provider.investigate('198.51.100.10', 'IPV4');
@@ -52,4 +54,59 @@ describe('Threat Intel providers', () => {
     expect(result.provider).toBe('external');
     expect(result.reason).toContain('not configured');
   });
+
+  it('queries VirusTotal and AbuseIPDB when API keys are provided', async () => {
+    process.env.VIRUSTOTAL_API_KEY = 'vt-fake-key';
+    process.env.ABUSEIPDB_API_KEY = 'abuse-fake-key';
+
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('virustotal')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            data: {
+              attributes: {
+                last_analysis_stats: { malicious: 80, suspicious: 10, harmless: 10 },
+                country: 'US',
+                asn: 15169,
+                as_owner: 'GOOGLE',
+              },
+            },
+          }),
+        });
+      }
+      if (url.includes('abuseipdb')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            data: {
+              abuseConfidenceScore: 92,
+              countryCode: 'US',
+              isp: 'Google LLC',
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    }) as any;
+
+    try {
+      const provider = new ExternalThreatIntelProvider();
+      const result = await provider.investigate('8.8.8.8', 'IPV4');
+
+      expect(result.status).toBe('available');
+      expect(result.state).toBe('SUCCESS');
+      expect(result.label).toBe('MALICIOUS');
+      expect(result.score).toBeGreaterThanOrEqual(90);
+      expect(result.enrichments).toHaveLength(2);
+      expect(result.enrichments?.[0].sourceName).toBe('VirusTotal v3');
+      expect(result.enrichments?.[1].sourceName).toBe('AbuseIPDB v2');
+    } finally {
+      global.fetch = originalFetch;
+      delete process.env.VIRUSTOTAL_API_KEY;
+      delete process.env.ABUSEIPDB_API_KEY;
+    }
+  });
 });
+
