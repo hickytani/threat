@@ -63,6 +63,7 @@ describe('Threat Intel providers', () => {
     global.fetch = jest.fn().mockImplementation((url: string) => {
       if (url.includes('virustotal')) {
         return Promise.resolve({
+          status: 200,
           ok: true,
           json: async () => ({
             data: {
@@ -78,6 +79,7 @@ describe('Threat Intel providers', () => {
       }
       if (url.includes('abuseipdb')) {
         return Promise.resolve({
+          status: 200,
           ok: true,
           json: async () => ({
             data: {
@@ -108,5 +110,172 @@ describe('Threat Intel providers', () => {
       delete process.env.ABUSEIPDB_API_KEY;
     }
   });
+
+  it('handles VirusTotal domain and file hash observable lookups', async () => {
+    process.env.VIRUSTOTAL_API_KEY = 'vt-fake-key';
+    const originalFetch = global.fetch;
+
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/domains/') || url.includes('/files/')) {
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({
+            data: { attributes: { last_analysis_stats: { malicious: 50, harmless: 50 } } },
+          }),
+        });
+      }
+      return Promise.reject(new Error('Unexpected URL'));
+    }) as any;
+
+    try {
+      const provider = new ExternalThreatIntelProvider();
+
+      const domainRes = await provider.investigate('malicious.example.com', 'DOMAIN');
+      expect(domainRes.status).toBe('available');
+      expect(domainRes.enrichments?.[0].sourceName).toBe('VirusTotal v3');
+
+      const hashRes = await provider.investigate('44d88612fea8a8f36de82e1278abb02f', 'HASH');
+      expect(hashRes.status).toBe('available');
+      expect(hashRes.enrichments?.[0].sourceName).toBe('VirusTotal v3');
+    } finally {
+      global.fetch = originalFetch;
+      delete process.env.VIRUSTOTAL_API_KEY;
+    }
+  });
+
+  it('handles 401 / 403 unauthorized responses gracefully', async () => {
+    process.env.VIRUSTOTAL_API_KEY = 'invalid-key';
+    const originalFetch = global.fetch;
+
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 401,
+      ok: false,
+    });
+
+    try {
+      const provider = new ExternalThreatIntelProvider();
+      const result = await provider.investigate('8.8.8.8', 'IPV4');
+
+      expect(result.status).toBe('unavailable');
+      expect(result.state).toBe('UNAUTHORIZED');
+      expect(result.reason).toContain('key rejected');
+    } finally {
+      global.fetch = originalFetch;
+      delete process.env.VIRUSTOTAL_API_KEY;
+    }
+  });
+
+  it('handles 404 not found responses gracefully', async () => {
+    process.env.VIRUSTOTAL_API_KEY = 'vt-fake-key';
+    const originalFetch = global.fetch;
+
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 404,
+      ok: false,
+    });
+
+    try {
+      const provider = new ExternalThreatIntelProvider();
+      const result = await provider.investigate('1.1.1.1', 'IPV4');
+
+      expect(result.status).toBe('unavailable');
+      expect(result.state).toBe('NOT_FOUND');
+      expect(result.reason).toContain('not found');
+    } finally {
+      global.fetch = originalFetch;
+      delete process.env.VIRUSTOTAL_API_KEY;
+    }
+  });
+
+  it('handles 429 rate limit responses gracefully', async () => {
+    process.env.VIRUSTOTAL_API_KEY = 'vt-fake-key';
+    const originalFetch = global.fetch;
+
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 429,
+      ok: false,
+    });
+
+    try {
+      const provider = new ExternalThreatIntelProvider();
+      const result = await provider.investigate('8.8.8.8', 'IPV4');
+
+      expect(result.status).toBe('unavailable');
+      expect(result.state).toBe('RATE_LIMITED');
+      expect(result.reason).toContain('rate limit');
+    } finally {
+      global.fetch = originalFetch;
+      delete process.env.VIRUSTOTAL_API_KEY;
+    }
+  });
+
+  it('handles 500 server error responses gracefully', async () => {
+    process.env.VIRUSTOTAL_API_KEY = 'vt-fake-key';
+    const originalFetch = global.fetch;
+
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 500,
+      ok: false,
+    });
+
+    try {
+      const provider = new ExternalThreatIntelProvider();
+      const result = await provider.investigate('8.8.8.8', 'IPV4');
+
+      expect(result.status).toBe('unavailable');
+      expect(result.state).toBe('ERROR');
+      expect(result.reason).toContain('server error');
+    } finally {
+      global.fetch = originalFetch;
+      delete process.env.VIRUSTOTAL_API_KEY;
+    }
+  });
+
+  it('handles timeout (AbortError) and network errors gracefully', async () => {
+    process.env.VIRUSTOTAL_API_KEY = 'vt-fake-key';
+    const originalFetch = global.fetch;
+
+    const timeoutErr = new Error('The operation was aborted');
+    timeoutErr.name = 'AbortError';
+
+    global.fetch = jest.fn().mockRejectedValue(timeoutErr);
+
+    try {
+      const provider = new ExternalThreatIntelProvider();
+      const result = await provider.investigate('8.8.8.8', 'IPV4');
+
+      expect(result.status).toBe('unavailable');
+      expect(result.state).toBe('TIMEOUT');
+      expect(result.reason).toContain('timed out');
+    } finally {
+      global.fetch = originalFetch;
+      delete process.env.VIRUSTOTAL_API_KEY;
+    }
+  });
+
+  it('handles malformed JSON response gracefully', async () => {
+    process.env.VIRUSTOTAL_API_KEY = 'vt-fake-key';
+    const originalFetch = global.fetch;
+
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: () => Promise.reject(new Error('SyntaxError: Unexpected token')),
+    });
+
+    try {
+      const provider = new ExternalThreatIntelProvider();
+      const result = await provider.investigate('8.8.8.8', 'IPV4');
+
+      expect(result.status).toBe('unavailable');
+      expect(result.state).toBe('ERROR');
+      expect(result.reason).toContain('malformed JSON');
+    } finally {
+      global.fetch = originalFetch;
+      delete process.env.VIRUSTOTAL_API_KEY;
+    }
+  });
 });
+
 

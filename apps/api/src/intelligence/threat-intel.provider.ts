@@ -126,6 +126,9 @@ export class ExternalThreatIntelProvider {
       rawResponse: Record<string, unknown>;
     }> = [];
 
+    let lastErrorState: ThreatIntelInvestigationState = 'UNAVAILABLE';
+    let lastReason = '';
+
     let highestScore = 0;
     let country: string | undefined;
     let asn: string | undefined;
@@ -153,35 +156,58 @@ export class ExternalThreatIntelProvider {
           });
           clearTimeout(timeoutId);
 
-          if (res.ok) {
-            const json: any = await res.json();
-            const stats = json?.data?.attributes?.last_analysis_stats || {};
-            const malicious = stats.malicious || 0;
-            const suspicious = stats.suspicious || 0;
-            const harmless = stats.harmless || 0;
-            const total = malicious + suspicious + harmless + (stats.undetected || 0);
+          if (res.status === 200) {
+            try {
+              const json: any = await res.json();
+              const stats = json?.data?.attributes?.last_analysis_stats || {};
+              const malicious = stats.malicious || 0;
+              const suspicious = stats.suspicious || 0;
+              const harmless = stats.harmless || 0;
+              const total = malicious + suspicious + harmless + (stats.undetected || 0);
 
-            const score = total > 0 ? Math.round(((malicious * 1.0 + suspicious * 0.5) / total) * 100) : 0;
-            if (score > highestScore) highestScore = score;
+              const score = total > 0 ? Math.round(((malicious * 1.0 + suspicious * 0.5) / total) * 100) : 0;
+              if (score > highestScore) highestScore = score;
 
-            country = json?.data?.attributes?.country || country;
-            const asOwner = json?.data?.attributes?.as_owner || '';
-            const asnNum = json?.data?.attributes?.asn;
-            if (asnNum) asn = `AS${asnNum} ${asOwner}`.trim();
+              country = json?.data?.attributes?.country || country;
+              const asOwner = json?.data?.attributes?.as_owner || '';
+              const asnNum = json?.data?.attributes?.asn;
+              if (asnNum) asn = `AS${asnNum} ${asOwner}`.trim();
 
-            enrichments.push({
-              sourceName: 'VirusTotal v3',
-              confidence: total > 0 ? Math.min(95, 50 + total) : 50,
-              rawResponse: {
-                stats,
-                reputation: json?.data?.attributes?.reputation,
-                tags: json?.data?.attributes?.tags,
-              },
-            });
+              enrichments.push({
+                sourceName: 'VirusTotal v3',
+                confidence: total > 0 ? Math.min(95, 50 + total) : 50,
+                rawResponse: {
+                  stats,
+                  reputation: json?.data?.attributes?.reputation,
+                  tags: json?.data?.attributes?.tags,
+                },
+              });
+            } catch {
+              lastErrorState = 'ERROR';
+              lastReason = 'VirusTotal API returned malformed JSON response.';
+            }
+          } else if (res.status === 401 || res.status === 403) {
+            lastErrorState = 'UNAUTHORIZED';
+            lastReason = `VirusTotal API key rejected (HTTP ${res.status}).`;
+          } else if (res.status === 404) {
+            lastErrorState = 'NOT_FOUND';
+            lastReason = `Observable ${value} not found in VirusTotal database.`;
+          } else if (res.status === 429) {
+            lastErrorState = 'RATE_LIMITED';
+            lastReason = 'VirusTotal API rate limit exceeded.';
+          } else {
+            lastErrorState = 'ERROR';
+            lastReason = `VirusTotal API server error (HTTP ${res.status}).`;
           }
         }
       } catch (err: any) {
-        // Safe timeout or network error handling
+        if (err?.name === 'AbortError') {
+          lastErrorState = 'TIMEOUT';
+          lastReason = 'VirusTotal request timed out (5000ms threshold).';
+        } else {
+          lastErrorState = 'ERROR';
+          lastReason = `VirusTotal network failure: ${err?.message || 'Connection failed'}.`;
+        }
       }
     }
 
@@ -196,29 +222,49 @@ export class ExternalThreatIntelProvider {
         });
         clearTimeout(timeoutId);
 
-        if (res.ok) {
-          const json: any = await res.json();
-          const data = json?.data || {};
-          const abuseScore = data.abuseConfidenceScore || 0;
-          if (abuseScore > highestScore) highestScore = abuseScore;
+        if (res.status === 200) {
+          try {
+            const json: any = await res.json();
+            const data = json?.data || {};
+            const abuseScore = data.abuseConfidenceScore || 0;
+            if (abuseScore > highestScore) highestScore = abuseScore;
 
-          country = data.countryCode || country;
-          if (data.isp) asn = `${data.isp} (${data.domain || ''})`.trim();
+            country = data.countryCode || country;
+            if (data.isp) asn = `${data.isp} (${data.domain || ''})`.trim();
 
-          enrichments.push({
-            sourceName: 'AbuseIPDB v2',
-            confidence: 90,
-            rawResponse: {
-              abuseConfidenceScore: data.abuseConfidenceScore,
-              totalReports: data.totalReports,
-              countryCode: data.countryCode,
-              usageType: data.usageType,
-              isp: data.isp,
-            },
-          });
+            enrichments.push({
+              sourceName: 'AbuseIPDB v2',
+              confidence: 90,
+              rawResponse: {
+                abuseConfidenceScore: data.abuseConfidenceScore,
+                totalReports: data.totalReports,
+                countryCode: data.countryCode,
+                usageType: data.usageType,
+                isp: data.isp,
+              },
+            });
+          } catch {
+            lastErrorState = 'ERROR';
+            lastReason = 'AbuseIPDB API returned malformed JSON response.';
+          }
+        } else if (res.status === 401 || res.status === 403) {
+          lastErrorState = 'UNAUTHORIZED';
+          lastReason = `AbuseIPDB API key rejected (HTTP ${res.status}).`;
+        } else if (res.status === 429) {
+          lastErrorState = 'RATE_LIMITED';
+          lastReason = 'AbuseIPDB API rate limit exceeded.';
+        } else {
+          lastErrorState = 'ERROR';
+          lastReason = `AbuseIPDB API server error (HTTP ${res.status}).`;
         }
       } catch (err: any) {
-        // Safe timeout or network error handling
+        if (err?.name === 'AbortError') {
+          lastErrorState = 'TIMEOUT';
+          lastReason = 'AbuseIPDB request timed out (5000ms threshold).';
+        } else {
+          lastErrorState = 'ERROR';
+          lastReason = `AbuseIPDB network failure: ${err?.message || 'Connection failed'}.`;
+        }
       }
     }
 
@@ -226,8 +272,8 @@ export class ExternalThreatIntelProvider {
       return {
         provider: 'external',
         status: 'unavailable',
-        state: 'UNAVAILABLE',
-        reason: `External threat intelligence provider has no results or failed for ${type} value ${value}.`,
+        state: lastErrorState,
+        reason: lastReason || `External threat intelligence lookup produced no results for ${type} value ${value}.`,
       };
     }
 

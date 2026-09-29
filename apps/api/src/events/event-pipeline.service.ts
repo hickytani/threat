@@ -499,6 +499,8 @@ export class EventPipelineService {
         case 'CONTAINS':
         case 'LIKE':
           return actualText.includes(expectedText);
+        case 'NOT_CONTAINS':
+          return !actualText.includes(expectedText);
         case 'STARTS_WITH':
           return actualText.startsWith(expectedText);
         case 'ENDS_WITH':
@@ -515,6 +517,12 @@ export class EventPipelineService {
         case 'LESS_THAN':
         case 'LT':
           return Number.isFinite(Number(actual)) && Number(actual) < Number(expectedValue);
+        case 'GREATER_THAN_OR_EQUAL':
+        case 'GTE':
+          return Number.isFinite(Number(actual)) && Number(actual) >= Number(expectedValue);
+        case 'LESS_THAN_OR_EQUAL':
+        case 'LTE':
+          return Number.isFinite(Number(actual)) && Number(actual) <= Number(expectedValue);
         case 'REGEX':
           if (typeof expectedValue !== 'string' || expectedValue.length > 256) return false;
           try {
