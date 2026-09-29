@@ -4,7 +4,7 @@ ThreatSync OS is a portfolio-quality security operations and investigation platf
 
 > This project is a local implementation for technical demonstration and portfolio review. It is not connected to live SIEM/EDR telemetry, does not claim production deployment, and does not perform autonomous external security response.
 
-[![Tests](https://img.shields.io/badge/tests-76%20passing-brightgreen)](#verification) [![Stack](https://img.shields.io/badge/stack-Next.js%20%7C%20NestJS%20%7C%20Prisma%20%7C%20BullMQ-0ea5e9)](#tech-stack) [![License](https://img.shields.io/badge/license-MIT-slate)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-148%20passing-brightgreen)](#verification) [![Stack](https://img.shields.io/badge/stack-Next.js%20%7C%20NestJS%20%7C%20Prisma%20%7C%20BullMQ-0ea5e9)](#tech-stack) [![License](https://img.shields.io/badge/license-MIT-slate)](LICENSE)
 
 ---
 
@@ -131,15 +131,36 @@ The dashboard and API are designed around the actual system data model and seede
 
 The project has been fully audited and validated with the following evidence:
 
-- 17 test suites passed (100%)
-- 119 tests passed (100%)
-- API build succeeded
-- Web build succeeded (24/24 static pages compiled)
-- Redis-backed async queue path accepted and processed live events
-- SSRF protections verified with redirect suppression and private network range validation
-- Integrations RBAC mutation enforcement verified (HTTP 403 for non-admins)
+- 19 test suites passed (100%)
+- 148 unit tests passed (100%)
+- 11 real HTTP E2E acceptance tests passed (100%) against live PostgreSQL 18
+- API build succeeded (`nest build`)
+- Web build succeeded (`next build` — 24/24 static pages compiled)
+- Prisma schema valid (`npx prisma validate`)
 
-See the related implementation in [apps/api/src/queues/queue.service.ts](apps/api/src/queues/queue.service.ts), [apps/api/src/queues/queue.worker.ts](apps/api/src/queues/queue.worker.ts), and [apps/api/src/notifications/notifications.service.ts](apps/api/src/notifications/notifications.service.ts).
+### Verification Categories
+
+#### VERIFIED LOCALLY
+- Real local PostgreSQL 18 database execution
+- HTTP authentication, cookie management, and tenant JWT guards
+- Complete event → detection rule match → alert → asset risk calculation → audit log pipeline
+- Strict multi-tenant isolation and IDOR protections
+- SSRF protections blocking private ranges and non-HTTP protocols
+- Secret protection (AES-256-GCM encryption at rest, redacted in GET API responses)
+
+#### LOCAL DEVELOPMENT
+- In-memory queue fallback (`ENABLE_IN_MEMORY_QUEUE_FALLBACK=true`)
+
+#### OPTIONAL EXTERNAL
+- VirusTotal v3 and AbuseIPDB v2 provider abstractions (safe failure states when API keys absent)
+- Webhook/Email notification policy structures
+
+#### NOT VERIFIED
+- Live Redis/BullMQ cluster daemon (no local Redis server process running)
+- Live external threat intelligence API network calls (no live API keys supplied)
+- Live external webhook/notification delivery
+- Live TLS/HTTPS termination
+- Docker containerized runtime deployment
 
 ---
 
@@ -375,16 +396,28 @@ npm test --workspaces --if-present -- --runInBand
 ```
 
 ```
-PASS src/intelligence/threat-intel.provider.spec.ts
-PASS src/auth/tenant.guard.spec.ts
-PASS src/auth/jwt-auth.guard.spec.ts
-PASS src/queues/queues.spec.ts
-PASS src/events/events.service.spec.ts
+PASS src/common/http-acceptance-e2e.spec.ts
 PASS src/queues/queue-hardening.spec.ts
 PASS src/investigation/investigation.spec.ts
+PASS src/integrations/integrations.controller.spec.ts
+PASS src/queues/queues.spec.ts
+PASS src/events/events.service.spec.ts
+PASS src/integrations/connectors/aws-cloudtrail.spec.ts
+PASS src/dashboard/dashboard.service.spec.ts
+PASS src/integrations/connectors/field-mapper.spec.ts
+PASS src/auth/tenant-rbac-security.spec.ts
+PASS src/auth/jwt-auth.guard.spec.ts
+PASS src/rules/rules.service.spec.ts
+PASS src/ingestion/ingestion-auth.guard.spec.ts
+PASS src/integrations/integrations.service.spec.ts
+PASS src/notifications/notifications.service.spec.ts
+PASS src/events/event-pipeline.spec.ts
+PASS src/auth/tenant.guard.spec.ts
+PASS src/intelligence/threat-intel.provider.spec.ts
+PASS src/common/rate-limit.middleware.spec.ts
 
-Test Suites:  7 passed, 7 total
-Tests:       76 passed, 76 total
+Test Suites: 19 passed, 19 total
+Tests:       148 passed, 148 total
 ```
 
 ---

@@ -144,10 +144,23 @@ export default function ForensicInvestigator() {
                     <span>Query Confidence: <span className="text-cyan-400 font-bold">{e.confidence}%</span></span>
                   </div>
                   
-                  {/* Mock scans mapping */}
                   <div className="p-3 bg-slate-950 border border-slate-900 rounded font-mono text-[10px] text-slate-400 space-y-1">
-                    <div>AV Match 1 (Avast): <span className="text-rose-400">{e.rawResponse?.scans?.avast?.result || 'CLEAN'}</span></div>
-                    <div>AV Match 2 (Sophos): <span className="text-rose-400">{e.rawResponse?.scans?.sophos?.result || 'CLEAN'}</span></div>
+                    {e.rawResponse?.stats ? (
+                      <div className="flex gap-4">
+                        <span>Malicious: <strong className="text-red-400">{String((e.rawResponse.stats as any).malicious ?? 0)}</strong></span>
+                        <span>Suspicious: <strong className="text-orange-400">{String((e.rawResponse.stats as any).suspicious ?? 0)}</strong></span>
+                        <span>Harmless: <strong className="text-emerald-400">{String((e.rawResponse.stats as any).harmless ?? 0)}</strong></span>
+                        <span>Undetected: <strong className="text-slate-400">{String((e.rawResponse.stats as any).undetected ?? 0)}</strong></span>
+                      </div>
+                    ) : e.rawResponse?.abuseConfidenceScore !== undefined ? (
+                      <div className="flex gap-4">
+                        <span>Abuse Confidence: <strong className="text-red-400">{String(e.rawResponse.abuseConfidenceScore)}%</strong></span>
+                        <span>Total Reports: <strong className="text-cyan-400">{String(e.rawResponse.totalReports ?? 0)}</strong></span>
+                        {Boolean(e.rawResponse.isp) && <span>ISP: <strong className="text-white">{String(e.rawResponse.isp)}</strong></span>}
+                      </div>
+                    ) : (
+                      <div>Summary: <span className="text-cyan-400">{String(e.rawResponse?.summary || e.rawResponse?.provider || 'Enrichment details recorded')}</span></div>
+                    )}
                   </div>
                 </div>
               ))}

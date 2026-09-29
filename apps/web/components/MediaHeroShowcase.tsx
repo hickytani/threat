@@ -303,7 +303,7 @@ export default function MediaHeroShowcase() {
               }`}
             >
               <Activity className="h-4 w-4" />
-              Global Attack Topology Map
+              Global Attack Topology Map (Visualization)
             </button>
           </div>
         </div>
