@@ -1,4 +1,5 @@
-'use client';
+﻿'use client';
+export const dynamic = 'force-dynamic'
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { SecurityEvent } from 'shared-types';

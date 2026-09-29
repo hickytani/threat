@@ -124,6 +124,19 @@ export class IntegrationsController {
     });
   }
 
+  @Post(':id/sync')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole, 'SOC_MANAGER' as UserRole, 'SECURITY_ANALYST' as UserRole)
+  @HttpCode(HttpStatus.OK)
+  async sync(
+    @CurrentMember() member: ActiveMember,
+    @Param('id') id: string,
+  ) {
+    return this.integrationsService.syncIntegration(member.organizationId, id, {
+      id: member.userId,
+    });
+  }
+
   @Delete(':id')
   @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
   @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole)

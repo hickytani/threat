@@ -1,4 +1,5 @@
-'use client';
+﻿'use client';
+export const dynamic = 'force-dynamic'
 
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck, Plus, RefreshCw, Search, Play, Trash2, CheckCircle2, XCircle, SlidersHorizontal, AlertTriangle } from 'lucide-react';

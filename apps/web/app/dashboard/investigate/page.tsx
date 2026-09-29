@@ -1,4 +1,5 @@
-'use client';
+﻿'use client';
+export const dynamic = 'force-dynamic'
 
 import React, { useState } from 'react';
 import { BrainCircuit, Search, ShieldAlert, ShieldCheck, Activity, Globe, Cpu, Database, HeartPulse } from 'lucide-react';

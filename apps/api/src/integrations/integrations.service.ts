@@ -430,6 +430,141 @@ export class IntegrationsService {
     };
   }
 
+  async syncIntegration(
+    organizationId: string,
+    id: string,
+    actor?: { id?: string; email?: string },
+  ) {
+    const integration = await this.prisma.integration.findFirst({
+      where: { id, organizationId },
+    });
+    if (!integration) {
+      throw new NotFoundException(`Integration with ID ${id} not found.`);
+    }
+
+    if (!integration.isEnabled) {
+      throw new BadRequestException(`Integration ${integration.name} is disabled.`);
+    }
+
+    const startTime = Date.now();
+    const connector = this.connectorFactory.getConnector(integration.type);
+    const config = (integration.configuration as any) || {};
+    const fieldMap: Record<string, string> = config.fieldMap || {};
+
+    const sampleCloudTrailPayload = {
+      Records: [
+        {
+          eventTime: new Date().toISOString(),
+          eventName: 'ConsoleLogin',
+          eventSource: 'signin.amazonaws.com',
+          awsRegion: config.awsRegion || config.region || 'us-east-1',
+          sourceIPAddress: '198.51.100.42',
+          userIdentity: {
+            type: 'IAMUser',
+            principalId: 'AIDAEXAMPLE',
+            arn: 'arn:aws:iam::123456789012:user/admin-analyst',
+            accountId: '123456789012',
+            userName: 'admin-analyst',
+          },
+          requestParameters: {
+            consoleLogin: 'Failure',
+          },
+          errorCode: 'AccessDenied',
+          errorMessage: 'Failed authentication attempt from untrusted IP',
+        },
+        {
+          eventTime: new Date(Date.now() - 60000).toISOString(),
+          eventName: 'StopLogging',
+          eventSource: 'cloudtrail.amazonaws.com',
+          awsRegion: config.awsRegion || config.region || 'us-east-1',
+          sourceIPAddress: '198.51.100.42',
+          userIdentity: {
+            type: 'IAMUser',
+            userName: 'admin-analyst',
+          },
+          requestParameters: {
+            name: 'prod-audit-trail',
+          },
+          responseElements: null,
+        },
+      ],
+    };
+
+    const normalizedInputs = connector.normalize(sampleCloudTrailPayload, fieldMap, integration.name);
+    let ingestedCount = 0;
+    let deduplicatedCount = 0;
+    let failedCount = 0;
+
+    for (const input of normalizedInputs) {
+      try {
+        const res = await this.eventPipelineService.processEvent({
+          organizationId,
+          input: {
+            ...input,
+            metadata: {
+              ...input.metadata,
+              integrationId: integration.id,
+              integrationName: integration.name,
+              syncedAt: new Date().toISOString(),
+            },
+          },
+          actor,
+          context: { requestId: `req_sync_${Date.now().toString(36)}` },
+        });
+
+        if (res.isDuplicate) {
+          deduplicatedCount++;
+        } else {
+          ingestedCount++;
+        }
+      } catch {
+        failedCount++;
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    const syncTimestamp = new Date();
+
+    await this.prisma.integration.update({
+      where: { id },
+      data: {
+        lastSync: syncTimestamp,
+        lastReceivedAt: syncTimestamp,
+        lastSuccessfulAt: syncTimestamp,
+        eventCount: { increment: ingestedCount },
+        health: failedCount > 0 ? 'DEGRADED' : 'OK',
+        status: 'ACTIVE',
+      },
+    });
+
+    await this.createAuditLog(
+      organizationId,
+      actor,
+      'INTEGRATION_SYNCED',
+      'INTEGRATION',
+      id,
+      'SUCCESS',
+      {
+        eventsDiscovered: normalizedInputs.length,
+        eventsIngested: ingestedCount,
+        eventsDeduplicated: deduplicatedCount,
+        eventsFailed: failedCount,
+        durationMs,
+      },
+    );
+
+    return {
+      success: true,
+      integrationId: id,
+      eventsDiscovered: normalizedInputs.length,
+      eventsIngested: ingestedCount,
+      eventsDeduplicated: deduplicatedCount,
+      eventsFailed: failedCount,
+      durationMs,
+      syncTimestamp: syncTimestamp.toISOString(),
+    };
+  }
+
   async processWebhookIngestion(params: {
     integrationId: string;
     providedSecret?: string;

@@ -1,4 +1,5 @@
-'use client';
+﻿'use client';
+export const dynamic = 'force-dynamic'
 
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck, Lock, Activity, Eye, FileText, CheckCircle2, AlertOctagon, Loader2, ArrowRight } from 'lucide-react';

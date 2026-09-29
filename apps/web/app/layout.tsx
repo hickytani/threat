@@ -1,3 +1,4 @@
+﻿export const dynamic = 'force-dynamic'
 import './globals.css';
 import type { Metadata } from 'next';
 import { Outfit, Space_Grotesk } from 'next/font/google';

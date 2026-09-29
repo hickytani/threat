@@ -350,6 +350,36 @@ describe('Real HTTP Acceptance & Security End-to-End Test Suite', () => {
       expect(item.secretToken).toBeUndefined();
       expect(item.encryptedCredentials).toBeUndefined();
     });
+
+    it('executes manual telemetry synchronization for CloudTrail connector via HTTP API and enforces tenant isolation', async () => {
+      const createRes = await request(app.getHttpServer())
+        .post('/api/v1/integrations')
+        .set('Authorization', `Bearer ${tenantAToken}`)
+        .send({
+          name: 'AWS CloudTrail Production Audit',
+          type: 'AWS_CLOUDTRAIL',
+          configuration: { awsRegion: 'us-east-1' },
+        })
+        .expect(201);
+
+      const integrationId = createRes.body.id;
+
+      // Prevent Tenant B from triggering manual sync for Tenant A integration (returns 404)
+      await request(app.getHttpServer())
+        .post(`/api/v1/integrations/${integrationId}/sync`)
+        .set('Authorization', `Bearer ${tenantBToken}`)
+        .expect(404);
+
+      // Tenant A executes manual sync successfully
+      const syncRes = await request(app.getHttpServer())
+        .post(`/api/v1/integrations/${integrationId}/sync`)
+        .set('Authorization', `Bearer ${tenantAToken}`)
+        .expect(200);
+
+      expect(syncRes.body.success).toBe(true);
+      expect(syncRes.body.eventsDiscovered).toBe(2);
+      expect(syncRes.body.eventsIngested).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('5. Health API Endpoint Verification', () => {

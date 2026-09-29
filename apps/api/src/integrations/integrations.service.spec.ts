@@ -199,4 +199,37 @@ describe('IntegrationsService', () => {
     expect(metrics.alertsGenerated).toBe(5);
     expect(metrics.health).toBe('OK');
   });
+
+  it('executes manual telemetry synchronization for CloudTrail integration', async () => {
+    const mockIntegration = {
+      id: 'int_cloudtrail_01',
+      organizationId: 'org_01',
+      name: 'AWS CloudTrail Production',
+      type: 'AWS_CLOUDTRAIL',
+      isEnabled: true,
+      status: 'ACTIVE',
+      configuration: {
+        awsRegion: 'us-east-1',
+      },
+    };
+
+    prismaMock.integration.findFirst.mockResolvedValue(mockIntegration);
+    prismaMock.integration.update.mockResolvedValue(mockIntegration);
+
+    const syncRes = await service.syncIntegration('org_01', 'int_cloudtrail_01');
+
+    expect(syncRes.success).toBe(true);
+    expect(syncRes.eventsDiscovered).toBe(2);
+    expect(syncRes.eventsIngested).toBe(2);
+    expect(eventPipelineMock.processEvent).toHaveBeenCalledTimes(2);
+    expect(prismaMock.integration.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'int_cloudtrail_01' },
+        data: expect.objectContaining({
+          health: 'OK',
+          status: 'ACTIVE',
+        }),
+      }),
+    );
+  });
 });

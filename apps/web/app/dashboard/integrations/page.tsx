@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
+export const dynamic = 'force-dynamic'
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Webhook, Shield, Cloud, Server, Plus, RefreshCw, Copy, Check, Trash2, Key, AlertCircle, ExternalLink } from 'lucide-react';
-import { getIntegrations, createIntegration, regenerateIntegrationSecret, deleteIntegration, API_BASE_URL } from '@/lib/api-client';
+import { getIntegrations, createIntegration, regenerateIntegrationSecret, deleteIntegration, apiRequest, API_BASE_URL } from '@/lib/api-client';
 
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<any[]>([]);
@@ -66,6 +67,20 @@ export default function IntegrationsPage() {
       setError(err instanceof Error ? err.message : 'Failed to create integration.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+
+  const handleSync = async (id: string) => {
+    try {
+      setSyncingId(id);
+      await apiRequest(`/integrations/${id}/sync`, { method: 'POST' });
+      await loadIntegrations();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Telemetry sync failed.');
+    } finally {
+      setSyncingId(null);
     }
   };
 
@@ -251,6 +266,15 @@ export default function IntegrationsPage() {
                     className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:border-cyan-500 hover:text-white"
                   >
                     Quick cURL
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={syncingId === item.id}
+                    onClick={() => handleSync(item.id)}
+                    className="rounded-lg border border-cyan-800 bg-cyan-950/60 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                  >
+                    {syncingId === item.id ? 'Syncing...' : 'Sync Now'}
                   </button>
 
                   <button
