@@ -20,7 +20,7 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET,
+        secret: process.env.JWT_SECRET || 'threatsync_super_secret_access_token_key_12345',
       });
 
       // Verify session exists and is active in the database

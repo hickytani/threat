@@ -9,13 +9,13 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { TenantGuard } from './tenant.guard.js';
 import { RolesGuard } from './roles.guard.js';
 
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 @Module({
   imports: [
     JwtModule.register({
       global: true,
-      secret: process.env.JWT_SECRET,
+      secret: process.env.JWT_SECRET || 'threatsync_super_secret_access_token_key_12345',
       signOptions: { expiresIn: '15m' },
     }),
   ],
