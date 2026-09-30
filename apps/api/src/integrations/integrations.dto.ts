@@ -1,4 +1,4 @@
-import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNumber, IsObject, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateIntegrationDto {
   @IsString()
@@ -69,3 +69,16 @@ export class TestEventDto {
   @IsObject()
   payload?: Record<string, any>;
 }
+
+export class ConfigureScheduleDto {
+  @IsOptional()
+  @IsBoolean()
+  isScheduleEnabled?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(1440)
+  pollingIntervalMinutes?: number;
+}
+

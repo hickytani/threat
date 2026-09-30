@@ -8,17 +8,20 @@ import { GenericWebhookConnector } from './connectors/generic-webhook.connector.
 import { AwsCloudTrailConnector } from './connectors/aws-cloudtrail.connector.js';
 import { ConnectorFactory } from './connectors/connector.factory.js';
 
+import { ConnectorSchedulerService } from './connector-scheduler.service.js';
+
 @Module({
   imports: [EventsModule, NotificationsModule],
   controllers: [IntegrationsController, WebhookIngestionController],
   providers: [
     IntegrationsService,
+    ConnectorSchedulerService,
     PrismaService,
     GenericWebhookConnector,
     AwsCloudTrailConnector,
     ConnectorFactory,
   ],
-  exports: [IntegrationsService, ConnectorFactory],
+  exports: [IntegrationsService, ConnectorFactory, ConnectorSchedulerService],
 })
 export class IntegrationsModule {}
 

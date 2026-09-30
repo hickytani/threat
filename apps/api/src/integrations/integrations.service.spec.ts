@@ -29,6 +29,21 @@ describe('IntegrationsService', () => {
       auditLog: {
         create: jest.fn().mockResolvedValue({ id: 'aud_1' }),
       },
+      connectorSyncHistory: {
+        create: jest.fn().mockResolvedValue({ id: 'hist_1' }),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'hist_1',
+            integrationId: 'int_cloudtrail_01',
+            organizationId: 'org_01',
+            status: 'SUCCESS',
+            startedAt: new Date(),
+            eventsDiscovered: 2,
+            eventsIngested: 2,
+          },
+        ]),
+        count: jest.fn().mockResolvedValue(1),
+      },
     };
 
     eventPipelineMock = {
@@ -228,6 +243,62 @@ describe('IntegrationsService', () => {
         data: expect.objectContaining({
           health: 'OK',
           status: 'ACTIVE',
+        }),
+      }),
+    );
+  });
+
+  it('retrieves sync history for an integration with pagination', async () => {
+    const mockIntegration = {
+      id: 'int_cloudtrail_01',
+      organizationId: 'org_01',
+    };
+    prismaMock.integration.findFirst.mockResolvedValue(mockIntegration);
+
+    const history = await service.getSyncHistory('org_01', 'int_cloudtrail_01', 1, 10);
+
+    expect(history.total).toBe(1);
+    expect(history.items.length).toBe(1);
+    expect(history.items[0].id).toBe('hist_1');
+    expect(prismaMock.connectorSyncHistory.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { integrationId: 'int_cloudtrail_01', organizationId: 'org_01' },
+        orderBy: { startedAt: 'desc' },
+        skip: 0,
+        take: 10,
+      }),
+    );
+  });
+
+  it('configures schedule and updates polling interval', async () => {
+    const mockIntegration = {
+      id: 'int_cloudtrail_01',
+      organizationId: 'org_01',
+      isScheduleEnabled: false,
+      pollingIntervalMinutes: 15,
+    };
+    prismaMock.integration.findFirst.mockResolvedValue(mockIntegration);
+    prismaMock.integration.update.mockResolvedValue({
+      ...mockIntegration,
+      isScheduleEnabled: true,
+      pollingIntervalMinutes: 5,
+      connectorStatus: 'READY',
+    });
+
+    const result = await service.configureSchedule('org_01', 'int_cloudtrail_01', {
+      isScheduleEnabled: true,
+      pollingIntervalMinutes: 5,
+    });
+
+    expect(result.isScheduleEnabled).toBe(true);
+    expect(result.pollingIntervalMinutes).toBe(5);
+    expect(prismaMock.integration.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'int_cloudtrail_01' },
+        data: expect.objectContaining({
+          isScheduleEnabled: true,
+          pollingIntervalMinutes: 5,
+          connectorStatus: 'READY',
         }),
       }),
     );

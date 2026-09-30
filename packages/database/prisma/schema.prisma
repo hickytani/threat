@@ -89,6 +89,26 @@ enum TaskStatus {
   BLOCKED
 }
 
+// Connector Lifecycle Status
+enum ConnectorStatus {
+  DISABLED
+  READY
+  SYNCING
+  HEALTHY
+  DEGRADED
+  ERROR
+  UNAUTHORIZED
+}
+
+// Connector Sync Result Status
+enum SyncStatus {
+  SUCCESS
+  FAILED
+  UNAUTHORIZED
+  TIMEOUT
+  PARTIAL
+}
+
 // Evidence Scanning Statuses
 enum EvidenceStatus {
   SCANNING
@@ -134,6 +154,7 @@ model Organization {
   notificationPolicies NotificationPolicy[]
   notificationDeliveries NotificationDelivery[]
   auditLogs    AuditLog[]
+  connectorSyncHistory ConnectorSyncHistory[]
 }
 
 // Organization Member Model (RBAC mapping)
@@ -491,28 +512,70 @@ model DetectionRule {
 
 // Integration Model
 model Integration {
-  id                   String       @id @default(uuid())
+  id                   String          @id @default(uuid())
   organizationId       String
   name                 String
-  type                 String       // WEBHOOK, AWS_CLOUDTRAIL, GENERIC_HTTP, IOC_INTEL, VULN_FEED, etc.
-  isEnabled            Boolean      @default(true)
-  status               String       @default("ACTIVE") // ACTIVE, PAUSED, ERROR, DISCONNECTED, NOT_CONFIGURED
-  health               String       @default("OK")     // OK, DEGRADED, FAILED, UNKNOWN
+  type                 String          // WEBHOOK, AWS_CLOUDTRAIL, GENERIC_HTTP, IOC_INTEL, VULN_FEED, etc.
+  isEnabled            Boolean         @default(true)
+  isScheduleEnabled    Boolean         @default(true)
+  status               String          @default("ACTIVE") // ACTIVE, PAUSED, ERROR, DISCONNECTED, NOT_CONFIGURED
+  health               String          @default("OK")     // OK, DEGRADED, FAILED, UNKNOWN
+  // Connector lifecycle operational status
+  connectorStatus      ConnectorStatus @default(READY)
+  // Scheduling
+  pollingIntervalMinutes Int           @default(15) // how often to sync; 0 = disabled
   lastSync             DateTime?
+  lastSyncCheckpoint   String?
   lastReceivedAt       DateTime?
   lastSuccessfulAt     DateTime?
   lastFailureAt        DateTime?
+  nextSyncAt           DateTime?       // when next scheduled sync should run
   lastErrorMessage     String?
-  errorCount           Int          @default(0)
-  eventCount           Int          @default(0)
-  configuration        Json         @default("{}")      // Actual Postgres JSONB configurations
-  encryptedCredentials String?      // Encrypted JSON string of keys/tokens or secret
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  errorCount           Int             @default(0)
+  eventCount           Int             @default(0)
+  // Total dedup count across all syncs
+  dedupCount           Int             @default(0)
+  configuration        Json            @default("{}")      // Actual Postgres JSONB configurations
+  encryptedCredentials String?         // Encrypted JSON string of keys/tokens or secret
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  organization         Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  syncHistory          ConnectorSyncHistory[]
 
   @@index([organizationId])
   @@index([organizationId, status])
+  @@index([organizationId, connectorStatus])
+  @@index([isEnabled, isScheduleEnabled, nextSyncAt])  // Scheduler query index
+}
+
+// Connector Sync History — one row per sync attempt
+model ConnectorSyncHistory {
+  id                   String          @id @default(uuid())
+  integrationId        String
+  organizationId       String
+  // Who triggered the sync
+  triggeredBy          String          @default("SYSTEM") // SYSTEM or user ID
+  triggerType          String          @default("SCHEDULED") // SCHEDULED | MANUAL
+  triggerSource        String          @default("SCHEDULED") // SCHEDULED | MANUAL | RETRY
+  startedAt            DateTime        @default(now())
+  completedAt          DateTime?
+  status               SyncStatus      @default(SUCCESS)
+  durationMs           Int?
+  eventsDiscovered     Int             @default(0)
+  eventsIngested       Int             @default(0)
+  eventsDeduplicated   Int             @default(0)
+  eventsFailed         Int             @default(0)
+  errorCode            String?
+  errorMessage         String?
+  // checkpoint state after this sync (safe to store, no credentials)
+  checkpointToken      String?
+  integration          Integration     @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  organization         Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId])
+  @@index([organizationId])
+  @@index([integrationId, startedAt])
+  @@index([status])
 }
 
 // Dedicated machine credential for organization-scoped telemetry ingestion.

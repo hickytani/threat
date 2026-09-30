@@ -14,7 +14,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { IntegrationsService } from './integrations.service.js';
-import { CreateIntegrationDto, UpdateIntegrationDto, TestEventDto } from './integrations.dto.js';
+import { CreateIntegrationDto, UpdateIntegrationDto, TestEventDto, ConfigureScheduleDto } from './integrations.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { TenantGuard } from '../auth/tenant.guard.js';
 import { RolesGuard } from '../auth/roles.guard.js';
@@ -133,6 +133,37 @@ export class IntegrationsController {
     @Param('id') id: string,
   ) {
     return this.integrationsService.syncIntegration(member.organizationId, id, {
+      id: member.userId,
+    });
+  }
+
+  @Get(':id/history')
+  @UseGuards(JwtAuthGuard, TenantGuard)
+  @HttpCode(HttpStatus.OK)
+  async getSyncHistory(
+    @CurrentMember() member: ActiveMember,
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.integrationsService.getSyncHistory(
+      member.organizationId,
+      id,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }
+
+  @Post(':id/schedule')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles('SUPER_ADMIN' as UserRole, 'ORG_ADMIN' as UserRole)
+  @HttpCode(HttpStatus.OK)
+  async configureSchedule(
+    @CurrentMember() member: ActiveMember,
+    @Param('id') id: string,
+    @Body() dto: ConfigureScheduleDto,
+  ) {
+    return this.integrationsService.configureSchedule(member.organizationId, id, dto, {
       id: member.userId,
     });
   }

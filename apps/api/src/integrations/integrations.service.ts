@@ -434,6 +434,7 @@ export class IntegrationsService {
     organizationId: string,
     id: string,
     actor?: { id?: string; email?: string },
+    triggerSource: 'SCHEDULED' | 'MANUAL' | 'RETRY' = 'MANUAL',
   ) {
     const integration = await this.prisma.integration.findFirst({
       where: { id, organizationId },
@@ -512,7 +513,7 @@ export class IntegrationsService {
           context: { requestId: `req_sync_${Date.now().toString(36)}` },
         });
 
-        if (res.isDuplicate) {
+        if (res.deduplicated) {
           deduplicatedCount++;
         } else {
           ingestedCount++;
@@ -524,16 +525,42 @@ export class IntegrationsService {
 
     const durationMs = Date.now() - startTime;
     const syncTimestamp = new Date();
+    const checkpointToken = `chk_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+    const syncStatus = failedCount === normalizedInputs.length && normalizedInputs.length > 0 ? 'FAILED' : failedCount > 0 ? 'PARTIAL' : 'SUCCESS';
+
+    await this.prisma.connectorSyncHistory.create({
+      data: {
+        integrationId: id,
+        organizationId,
+        status: syncStatus,
+        eventsDiscovered: normalizedInputs.length,
+        eventsIngested: ingestedCount,
+        eventsDeduplicated: deduplicatedCount,
+        eventsFailed: failedCount,
+        durationMs,
+        checkpointToken,
+        triggerSource,
+      },
+    });
+
+    const intervalMinutes = integration.pollingIntervalMinutes || 15;
+    const nextSyncAt = integration.isScheduleEnabled
+      ? new Date(syncTimestamp.getTime() + intervalMinutes * 60 * 1000)
+      : null;
 
     await this.prisma.integration.update({
       where: { id },
       data: {
         lastSync: syncTimestamp,
         lastReceivedAt: syncTimestamp,
-        lastSuccessfulAt: syncTimestamp,
+        lastSuccessfulAt: syncStatus !== 'FAILED' ? syncTimestamp : integration.lastSuccessfulAt,
         eventCount: { increment: ingestedCount },
         health: failedCount > 0 ? 'DEGRADED' : 'OK',
         status: 'ACTIVE',
+        connectorStatus: failedCount > 0 ? 'DEGRADED' : 'HEALTHY',
+        lastSyncCheckpoint: checkpointToken,
+        nextSyncAt,
+        lastErrorMessage: failedCount > 0 ? `${failedCount} event(s) failed during sync` : null,
       },
     });
 
@@ -550,6 +577,7 @@ export class IntegrationsService {
         eventsDeduplicated: deduplicatedCount,
         eventsFailed: failedCount,
         durationMs,
+        triggerSource,
       },
     );
 
@@ -562,7 +590,82 @@ export class IntegrationsService {
       eventsFailed: failedCount,
       durationMs,
       syncTimestamp: syncTimestamp.toISOString(),
+      checkpointToken,
+      nextSyncAt: nextSyncAt ? nextSyncAt.toISOString() : null,
     };
+  }
+
+  async getSyncHistory(organizationId: string, integrationId: string, page = 1, limit = 20) {
+    const integration = await this.prisma.integration.findFirst({
+      where: { id: integrationId, organizationId },
+    });
+    if (!integration) {
+      throw new NotFoundException(`Integration with ID ${integrationId} not found.`);
+    }
+
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.prisma.connectorSyncHistory.findMany({
+        where: { integrationId, organizationId },
+        orderBy: { startedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.connectorSyncHistory.count({
+        where: { integrationId, organizationId },
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async configureSchedule(
+    organizationId: string,
+    id: string,
+    dto: { isScheduleEnabled?: boolean; pollingIntervalMinutes?: number },
+    actor?: { id?: string; email?: string },
+  ) {
+    const existing = await this.prisma.integration.findFirst({
+      where: { id, organizationId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Integration with ID ${id} not found.`);
+    }
+
+    const isScheduleEnabled = dto.isScheduleEnabled !== undefined ? dto.isScheduleEnabled : existing.isScheduleEnabled;
+    const pollingIntervalMinutes = dto.pollingIntervalMinutes !== undefined ? dto.pollingIntervalMinutes : existing.pollingIntervalMinutes;
+
+    const nextSyncAt = isScheduleEnabled
+      ? new Date(Date.now() + (pollingIntervalMinutes || 15) * 60 * 1000)
+      : null;
+
+    const updated = await this.prisma.integration.update({
+      where: { id },
+      data: {
+        isScheduleEnabled,
+        pollingIntervalMinutes,
+        nextSyncAt,
+        connectorStatus: isScheduleEnabled ? 'READY' : 'DISABLED',
+      },
+    });
+
+    await this.createAuditLog(
+      organizationId,
+      actor,
+      'CONNECTOR_SCHEDULE_UPDATED',
+      'INTEGRATION',
+      id,
+      'SUCCESS',
+      { isScheduleEnabled, pollingIntervalMinutes },
+    );
+
+    return this.sanitizeIntegration(updated);
   }
 
   async processWebhookIngestion(params: {
